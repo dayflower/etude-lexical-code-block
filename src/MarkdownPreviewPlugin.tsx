@@ -1,3 +1,4 @@
+import { $isCodeNode } from "@lexical/code-core";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getRoot,
@@ -31,6 +32,10 @@ function serializeToMarkdown(): string {
     if ($isParagraphNode(block)) {
       const line = block.getChildren().map(serializeInlineNode).join("");
       blocks.push(line);
+    } else if ($isCodeNode(block)) {
+      const lang = block.getLanguage() ?? "";
+      const content = block.getTextContent();
+      blocks.push(`\`\`\`${lang}\n${content}\n\`\`\``);
     } else {
       blocks.push(block.getTextContent());
     }
