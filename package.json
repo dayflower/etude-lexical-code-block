@@ -1,0 +1,40 @@
+{
+  "name": "etude-lexical-code-block",
+  "description": "Etude for Lexical rich text editor with code block support",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dayflower/etude-lexical-code-block.git"
+  },
+  "author": "dayflower (https://github.com/dayflower)",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --no-clear-screen",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "check": "biome check",
+    "fix": "biome check --write"
+  },
+  "dependencies": {
+    "@lexical/history": "^0.43.0",
+    "@lexical/react": "^0.43.0",
+    "@lexical/rich-text": "^0.43.0",
+    "lexical": "^0.43.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.12",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "globals": "^17.5.0",
+    "tailwindcss": "^4.2.2",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.8"
+  }
+}
