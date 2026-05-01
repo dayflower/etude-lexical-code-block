@@ -1,4 +1,3 @@
-import { $isCodeNode } from "@lexical/code-core";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getRoot,
@@ -7,6 +6,7 @@ import {
   type LexicalNode,
 } from "lexical";
 import { useEffect } from "react";
+import { $isMarkdownCodeBlockNode } from "./MarkdownCodeBlockNode";
 
 function applyTextFormat(text: string, format: number): string {
   let result = text;
@@ -32,10 +32,8 @@ function serializeToMarkdown(): string {
     if ($isParagraphNode(block)) {
       const line = block.getChildren().map(serializeInlineNode).join("");
       blocks.push(line);
-    } else if ($isCodeNode(block)) {
-      const lang = block.getLanguage() ?? "";
-      const content = block.getTextContent();
-      blocks.push(`\`\`\`${lang}\n${content}\n\`\`\``);
+    } else if ($isMarkdownCodeBlockNode(block)) {
+      blocks.push(block.getTextContent());
     } else {
       blocks.push(block.getTextContent());
     }

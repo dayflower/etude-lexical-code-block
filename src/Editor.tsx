@@ -1,16 +1,13 @@
-import { CODE } from "@lexical/markdown";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { useState } from "react";
 import { initialConfig } from "./editorConfig";
+import MarkdownCodeBlockPlugin from "./MarkdownCodeBlockPlugin";
 import MarkdownPreviewPlugin from "./MarkdownPreviewPlugin";
-
-const MARKDOWN_TRANSFORMERS = [CODE];
 
 export default function Editor() {
   const [markdownSource, setMarkdownSource] = useState("");
@@ -37,7 +34,7 @@ export default function Editor() {
               />
               <HistoryPlugin />
               <AutoFocusPlugin />
-              <MarkdownShortcutPlugin transformers={MARKDOWN_TRANSFORMERS} />
+              <MarkdownCodeBlockPlugin />
               <MarkdownPreviewPlugin onMarkdown={setMarkdownSource} />
             </div>
           </LexicalComposer>
