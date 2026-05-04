@@ -67,6 +67,18 @@ function $unwrapMarkdownCodeBlockNode(codeBlock: MarkdownCodeBlockNode): void {
   codeBlock.remove();
 }
 
+function $exitCodeBlockBefore(codeBlock: MarkdownCodeBlockNode): void {
+  const paragraph = $createParagraphNode();
+  codeBlock.insertBefore(paragraph);
+  paragraph.select();
+}
+
+function $exitCodeBlockAfter(codeBlock: MarkdownCodeBlockNode): void {
+  const paragraph = $createParagraphNode();
+  codeBlock.insertAfter(paragraph);
+  paragraph.select();
+}
+
 function $syncCodeBlockLanguage(codeBlock: MarkdownCodeBlockNode): void {
   const first = codeBlock.getFirstChild();
   if (!$isMarkdownCodeFenceNode(first)) return;
@@ -92,6 +104,27 @@ function useInsertParagraphBehavior(editor: LexicalEditor): void {
 
         const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
         if (codeBlock) {
+          const firstChild = codeBlock.getFirstChild();
+          const lastChild = codeBlock.getLastChild();
+
+          if (
+            $isMarkdownCodeFenceNode(anchorNode) &&
+            anchorNode.is(firstChild) &&
+            anchor.offset === 0
+          ) {
+            $exitCodeBlockBefore(codeBlock);
+            return true;
+          }
+
+          if (
+            $isMarkdownCodeFenceNode(anchorNode) &&
+            anchorNode.is(lastChild) &&
+            anchor.offset === anchorNode.getTextContentSize()
+          ) {
+            $exitCodeBlockAfter(codeBlock);
+            return true;
+          }
+
           selection.insertLineBreak();
           return true;
         }
