@@ -15,6 +15,7 @@ import {
   KEY_ESCAPE_COMMAND,
   type LexicalEditor,
   type LexicalNode,
+  ParagraphNode,
 } from "lexical";
 import { useEffect, useRef } from "react";
 import { CSS_CLASSES } from "./constants";
@@ -100,6 +101,86 @@ function $exitCodeBlockAfter(codeBlock: MarkdownCodeBlockNode): void {
   const paragraph = $createParagraphNode();
   codeBlock.insertAfter(paragraph);
   paragraph.select();
+}
+
+function $buildCodeBlockFromParagraphs(
+  openParagraph: ParagraphNode,
+  middleParagraphs: ParagraphNode[],
+  closeParagraph: ParagraphNode,
+  language: string,
+): void {
+  const codeBlock = $createMarkdownCodeBlockNode(language);
+  codeBlock.append(
+    $createMarkdownCodeFenceNode(openParagraph.getTextContent()),
+  );
+  for (const mid of middleParagraphs) {
+    codeBlock.append($createLineBreakNode());
+    const text = mid.getTextContent();
+    if (text.length > 0) {
+      codeBlock.append($createTextNode(text));
+    }
+  }
+  const closeFenceText = closeParagraph.getTextContent();
+  codeBlock.append($createLineBreakNode());
+  const closeFenceNode = $createMarkdownCodeFenceNode(closeFenceText);
+  codeBlock.append(closeFenceNode);
+
+  openParagraph.replace(codeBlock);
+  for (const mid of middleParagraphs) mid.remove();
+  closeParagraph.remove();
+
+  closeFenceNode.select(closeFenceText.length, closeFenceText.length);
+}
+
+function $tryReassembleFromClose(paragraph: ParagraphNode): boolean {
+  if (!OPEN_FENCE_REGEX.test(paragraph.getTextContent())) return false;
+
+  const middles: ParagraphNode[] = [];
+  let cursor: LexicalNode | null = paragraph.getPreviousSibling();
+  while (cursor) {
+    if (!$isParagraphNode(cursor)) return false;
+    const match = OPEN_FENCE_REGEX.exec(cursor.getTextContent());
+    if (match) {
+      const language = match[1] ?? "";
+      middles.reverse();
+      $buildCodeBlockFromParagraphs(cursor, middles, paragraph, language);
+      return true;
+    }
+    middles.push(cursor);
+    cursor = cursor.getPreviousSibling();
+  }
+  return false;
+}
+
+function $tryReassembleFromOpen(paragraph: ParagraphNode): boolean {
+  const match = OPEN_FENCE_REGEX.exec(paragraph.getTextContent());
+  if (!match) return false;
+  const language = match[1] ?? "";
+
+  const middles: ParagraphNode[] = [];
+  let cursor: LexicalNode | null = paragraph.getNextSibling();
+  while (cursor) {
+    if (!$isParagraphNode(cursor)) return false;
+    if (OPEN_FENCE_REGEX.test(cursor.getTextContent())) {
+      $buildCodeBlockFromParagraphs(paragraph, middles, cursor, language);
+      return true;
+    }
+    middles.push(cursor);
+    cursor = cursor.getNextSibling();
+  }
+  return false;
+}
+
+function useReassembleCodeBlock(editor: LexicalEditor): void {
+  useEffect(() => {
+    const remove = editor.registerNodeTransform(ParagraphNode, (paragraph) => {
+      if ($tryReassembleFromClose(paragraph)) return;
+      $tryReassembleFromOpen(paragraph);
+    });
+    return () => {
+      remove();
+    };
+  }, [editor]);
 }
 
 function useInsertParagraphBehavior(editor: LexicalEditor): void {
@@ -265,5 +346,6 @@ export default function MarkdownCodeBlockPlugin() {
   useInsertParagraphBehavior(editor);
   useEscapeKeyBehavior(editor);
   useSelectionFocusTracking(editor);
+  useReassembleCodeBlock(editor);
   return null;
 }
