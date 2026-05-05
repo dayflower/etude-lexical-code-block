@@ -12,6 +12,8 @@ import {
   COMMAND_PRIORITY_HIGH,
   COMMAND_PRIORITY_LOW,
   INSERT_PARAGRAPH_COMMAND,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_ARROW_RIGHT_COMMAND,
   KEY_ESCAPE_COMMAND,
   type LexicalEditor,
   type LexicalNode,
@@ -286,6 +288,50 @@ function useEscapeKeyBehavior(editor: LexicalEditor): void {
   }, [editor]);
 }
 
+function useArrowKeyExitBehavior(editor: LexicalEditor): void {
+  useEffect(() => {
+    function $tryExit(
+      event: KeyboardEvent | null,
+      requireEnd: boolean,
+    ): boolean {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) || !selection.isCollapsed())
+        return false;
+
+      const anchor = selection.anchor;
+      const anchorNode = anchor.getNode();
+      if (!$isMarkdownCodeFenceNode(anchorNode)) return false;
+
+      const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
+      if (!codeBlock) return false;
+      if (!anchorNode.is(codeBlock.getLastChild())) return false;
+      if (codeBlock.getNextSibling() !== null) return false;
+      if (requireEnd && anchor.offset !== anchorNode.getTextContentSize())
+        return false;
+
+      event?.preventDefault();
+      $exitCodeBlockAfter(codeBlock);
+      return true;
+    }
+
+    const removeRight = editor.registerCommand(
+      KEY_ARROW_RIGHT_COMMAND,
+      (event) => $tryExit(event, true),
+      COMMAND_PRIORITY_LOW,
+    );
+    const removeDown = editor.registerCommand(
+      KEY_ARROW_DOWN_COMMAND,
+      (event) => $tryExit(event, false),
+      COMMAND_PRIORITY_LOW,
+    );
+
+    return () => {
+      removeRight();
+      removeDown();
+    };
+  }, [editor]);
+}
+
 function useSelectionFocusTracking(editor: LexicalEditor): void {
   const focusedKeysRef = useRef<Set<string>>(new Set());
 
@@ -345,6 +391,7 @@ export default function MarkdownCodeBlockPlugin() {
   const [editor] = useLexicalComposerContext();
   useInsertParagraphBehavior(editor);
   useEscapeKeyBehavior(editor);
+  useArrowKeyExitBehavior(editor);
   useSelectionFocusTracking(editor);
   useReassembleCodeBlock(editor);
   return null;
