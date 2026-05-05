@@ -68,10 +68,6 @@ export class MarkdownCodeBlockNode extends ElementNode {
   getLanguage(): string {
     return this.getLatest().__language;
   }
-
-  canBeEmpty(): false {
-    return false;
-  }
 }
 
 export function $createMarkdownCodeBlockNode(
