@@ -40,16 +40,39 @@ function $findNearestMarkdownCodeBlockNode(
   return null;
 }
 
-function $isCodeBlockValid(codeBlock: MarkdownCodeBlockNode): boolean {
-  const children = codeBlock.getChildren();
-  if (children.length < 2) return false;
-  const first = children[0];
-  const last = children[children.length - 1];
-  if (!$isMarkdownCodeFenceNode(first)) return false;
-  if (!$isMarkdownCodeFenceNode(last)) return false;
-  if (!OPEN_FENCE_REGEX.test(first.getTextContent())) return false;
-  if (!CLOSE_FENCE_REGEX.test(last.getTextContent())) return false;
-  return true;
+function $extractValidCodeBlockInfo(
+  codeBlock: MarkdownCodeBlockNode,
+): { language: string } | null {
+  const text = codeBlock.getTextContent();
+  const lines = text.split("\n");
+  if (lines.length < 2) return null;
+  const openMatch = OPEN_FENCE_REGEX.exec(lines[0]);
+  if (!openMatch) return null;
+  if (!CLOSE_FENCE_REGEX.test(lines[lines.length - 1])) return null;
+  return { language: openMatch[1] ?? "" };
+}
+
+function $normalizeCodeBlock(
+  codeBlock: MarkdownCodeBlockNode,
+  language: string,
+): void {
+  const text = codeBlock.getTextContent();
+  const lines = text.split("\n");
+  for (const child of codeBlock.getChildren()) {
+    child.remove();
+  }
+  codeBlock.append($createMarkdownCodeFenceNode(lines[0]));
+  for (let i = 1; i < lines.length - 1; i++) {
+    codeBlock.append($createLineBreakNode());
+    if (lines[i].length > 0) {
+      codeBlock.append($createTextNode(lines[i]));
+    }
+  }
+  codeBlock.append($createLineBreakNode());
+  codeBlock.append($createMarkdownCodeFenceNode(lines[lines.length - 1]));
+  if (codeBlock.getLanguage() !== language) {
+    codeBlock.setLanguage(language);
+  }
 }
 
 function $unwrapMarkdownCodeBlockNode(codeBlock: MarkdownCodeBlockNode): void {
@@ -77,17 +100,6 @@ function $exitCodeBlockAfter(codeBlock: MarkdownCodeBlockNode): void {
   const paragraph = $createParagraphNode();
   codeBlock.insertAfter(paragraph);
   paragraph.select();
-}
-
-function $syncCodeBlockLanguage(codeBlock: MarkdownCodeBlockNode): void {
-  const first = codeBlock.getFirstChild();
-  if (!$isMarkdownCodeFenceNode(first)) return;
-  const match = OPEN_FENCE_REGEX.exec(first.getTextContent());
-  if (!match) return;
-  const language = match[1] ?? "";
-  if (codeBlock.getLanguage() !== language) {
-    codeBlock.setLanguage(language);
-  }
 }
 
 function useInsertParagraphBehavior(editor: LexicalEditor): void {
@@ -231,8 +243,9 @@ function useSelectionFocusTracking(editor: LexicalEditor): void {
           for (const key of exited) {
             const node = $getNodeByKey(key);
             if (!$isMarkdownCodeBlockNode(node)) continue;
-            if ($isCodeBlockValid(node)) {
-              $syncCodeBlockLanguage(node);
+            const info = $extractValidCodeBlockInfo(node);
+            if (info) {
+              $normalizeCodeBlock(node, info.language);
             } else {
               $unwrapMarkdownCodeBlockNode(node);
             }
