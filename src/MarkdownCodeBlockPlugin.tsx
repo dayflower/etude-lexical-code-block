@@ -26,7 +26,7 @@ import {
   $createMarkdownCodeFenceNode,
   $isMarkdownCodeBlockNode,
   $isMarkdownCodeFenceNode,
-  type MarkdownCodeBlockNode,
+  MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
 const OPEN_FENCE_REGEX = /^```([a-zA-Z0-9_+-]*)\s*$/;
@@ -179,6 +179,22 @@ function useReassembleCodeBlock(editor: LexicalEditor): void {
       if ($tryReassembleFromClose(paragraph)) return;
       $tryReassembleFromOpen(paragraph);
     });
+    return () => {
+      remove();
+    };
+  }, [editor]);
+}
+
+function useRemoveEmptyCodeBlock(editor: LexicalEditor): void {
+  useEffect(() => {
+    const remove = editor.registerNodeTransform(
+      MarkdownCodeBlockNode,
+      (codeBlock) => {
+        if (codeBlock.isEmpty()) {
+          codeBlock.remove();
+        }
+      },
+    );
     return () => {
       remove();
     };
@@ -394,5 +410,6 @@ export default function MarkdownCodeBlockPlugin() {
   useArrowKeyExitBehavior(editor);
   useSelectionFocusTracking(editor);
   useReassembleCodeBlock(editor);
+  useRemoveEmptyCodeBlock(editor);
   return null;
 }
