@@ -1,4 +1,8 @@
 import {
+  $createLineBreakNode,
+  $createTextNode,
+  type DOMConversionMap,
+  type DOMConversionOutput,
   type EditorConfig,
   ElementNode,
   type LexicalNode,
@@ -45,6 +49,15 @@ export class MarkdownCodeBlockNode extends ElementNode {
     return false;
   }
 
+  static importDOM(): DOMConversionMap | null {
+    return {
+      pre: () => ({
+        conversion: $convertPreElement,
+        priority: 1,
+      }),
+    };
+  }
+
   static importJSON(
     serializedNode: SerializedMarkdownCodeBlockNode,
   ): MarkdownCodeBlockNode {
@@ -80,6 +93,51 @@ export function $isMarkdownCodeBlockNode(
   node: LexicalNode | null | undefined,
 ): node is MarkdownCodeBlockNode {
   return node instanceof MarkdownCodeBlockNode;
+}
+
+const LANGUAGE_CLASS_REGEX = /^language-(.+)$/;
+
+function detectLanguage(pre: HTMLElement): string {
+  const dataLang = pre.getAttribute("data-language");
+  if (dataLang) return dataLang;
+
+  const code = pre.querySelector("code");
+  if (code) {
+    for (const cls of code.classList) {
+      const m = LANGUAGE_CLASS_REGEX.exec(cls);
+      if (m) return m[1];
+    }
+  }
+
+  for (const cls of pre.classList) {
+    const m = LANGUAGE_CLASS_REGEX.exec(cls);
+    if (m) return m[1];
+  }
+
+  return "";
+}
+
+function $convertPreElement(domNode: HTMLElement): DOMConversionOutput {
+  const language = detectLanguage(domNode);
+  const raw = domNode.textContent ?? "";
+  const text = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+  const lines = text.split("\n");
+
+  const codeBlock = $createMarkdownCodeBlockNode(language);
+  codeBlock.append($createMarkdownCodeFenceNode(`\`\`\`${language}`));
+  for (const line of lines) {
+    codeBlock.append($createLineBreakNode());
+    if (line.length > 0) {
+      codeBlock.append($createTextNode(line));
+    }
+  }
+  codeBlock.append($createLineBreakNode());
+  codeBlock.append($createMarkdownCodeFenceNode("```"));
+
+  return {
+    node: codeBlock,
+    forChild: () => null,
+  };
 }
 
 export class MarkdownCodeFenceNode extends TextNode {
