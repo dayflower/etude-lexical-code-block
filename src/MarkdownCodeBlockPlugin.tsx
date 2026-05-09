@@ -19,6 +19,7 @@ import {
   type LexicalEditor,
   type LexicalNode,
   ParagraphNode,
+  TextNode,
 } from "lexical";
 import { useEffect, useRef } from "react";
 import { CSS_CLASSES } from "./constants";
@@ -176,12 +177,25 @@ function $tryReassembleFromOpen(paragraph: ParagraphNode): boolean {
 
 function useReassembleCodeBlock(editor: LexicalEditor): void {
   useEffect(() => {
-    const remove = editor.registerNodeTransform(ParagraphNode, (paragraph) => {
+    const $reassembleAtParagraph = (paragraph: ParagraphNode) => {
       if ($tryReassembleFromClose(paragraph)) return;
       $tryReassembleFromOpen(paragraph);
+    };
+
+    const removeParagraph = editor.registerNodeTransform(
+      ParagraphNode,
+      $reassembleAtParagraph,
+    );
+
+    const removeText = editor.registerNodeTransform(TextNode, (textNode) => {
+      const parent = textNode.getParent();
+      if (!$isParagraphNode(parent)) return;
+      $reassembleAtParagraph(parent);
     });
+
     return () => {
-      remove();
+      removeParagraph();
+      removeText();
     };
   }, [editor]);
 }
