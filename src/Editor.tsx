@@ -5,6 +5,7 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { useState } from "react";
+import CodeHighlightingPlugin from "./CodeHighlightingPlugin";
 import { initialConfig } from "./editorConfig";
 import MarkdownCodeBlockPlugin from "./MarkdownCodeBlockPlugin";
 import MarkdownPreviewPlugin from "./MarkdownPreviewPlugin";
@@ -35,6 +36,7 @@ export default function Editor() {
               <HistoryPlugin />
               <AutoFocusPlugin />
               <MarkdownCodeBlockPlugin />
+              <CodeHighlightingPlugin />
               <MarkdownPreviewPlugin onMarkdown={setMarkdownSource} />
             </div>
           </LexicalComposer>

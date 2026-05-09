@@ -1,3 +1,4 @@
+import { $createCodeHighlightNode } from "@lexical/code-core";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $createLineBreakNode,
@@ -68,7 +69,7 @@ function $normalizeCodeBlock(
   for (let i = 1; i < lines.length - 1; i++) {
     codeBlock.append($createLineBreakNode());
     if (lines[i].length > 0) {
-      codeBlock.append($createTextNode(lines[i]));
+      codeBlock.append($createCodeHighlightNode(lines[i]));
     }
   }
   codeBlock.append($createLineBreakNode());
@@ -119,7 +120,7 @@ function $buildCodeBlockFromParagraphs(
     codeBlock.append($createLineBreakNode());
     const text = mid.getTextContent();
     if (text.length > 0) {
-      codeBlock.append($createTextNode(text));
+      codeBlock.append($createCodeHighlightNode(text));
     }
   }
   const closeFenceText = closeParagraph.getTextContent();

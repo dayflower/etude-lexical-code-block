@@ -1,6 +1,6 @@
+import { $createCodeHighlightNode } from "@lexical/code-core";
 import {
   $createLineBreakNode,
-  $createTextNode,
   type DOMConversionMap,
   type DOMConversionOutput,
   type EditorConfig,
@@ -128,7 +128,7 @@ function $convertPreElement(domNode: HTMLElement): DOMConversionOutput {
   for (const line of lines) {
     codeBlock.append($createLineBreakNode());
     if (line.length > 0) {
-      codeBlock.append($createTextNode(line));
+      codeBlock.append($createCodeHighlightNode(line));
     }
   }
   codeBlock.append($createLineBreakNode());
