@@ -71,22 +71,45 @@ function tokenize(code: string, grammar: Prism.Grammar): FlatToken[] {
   return flat;
 }
 
-function expectedChildrenFromTokens(tokens: FlatToken[]): ExpectedChild[] {
+function expectedChildrenFromCodeText(
+  codeText: string,
+  grammar: Prism.Grammar | null,
+): ExpectedChild[] {
+  // Structure invariant: the middle of a code block always begins with a
+  // separator linebreak (after openFence). For each line of code, we then
+  // emit zero or more highlight tokens followed by a linebreak. So an empty
+  // code block has just one linebreak.
   const result: ExpectedChild[] = [{ kind: "linebreak" }];
-  for (const token of tokens) {
-    const segments = token.content.split("\n");
-    segments.forEach((segment, i) => {
-      if (i > 0) result.push({ kind: "linebreak" });
-      if (segment.length > 0) {
-        result.push({
-          kind: "highlight",
-          text: segment,
-          highlightType: token.type,
+  if (codeText.length === 0) return result;
+
+  const flat: FlatToken[] = grammar
+    ? tokenize(codeText, grammar)
+    : [{ type: null, content: codeText }];
+
+  const lineTokens: FlatToken[][] = [[]];
+  for (const token of flat) {
+    const parts = token.content.split("\n");
+    parts.forEach((part, i) => {
+      if (i > 0) lineTokens.push([]);
+      if (part.length > 0) {
+        lineTokens[lineTokens.length - 1].push({
+          type: token.type,
+          content: part,
         });
       }
     });
   }
-  result.push({ kind: "linebreak" });
+
+  for (const line of lineTokens) {
+    for (const t of line) {
+      result.push({
+        kind: "highlight",
+        text: t.content,
+        highlightType: t.type,
+      });
+    }
+    result.push({ kind: "linebreak" });
+  }
   return result;
 }
 
@@ -98,28 +121,28 @@ function getCodeText(codeBlock: MarkdownCodeBlockNode): string | null {
   if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
     return null;
   }
-  let text = "";
-  let pendingNewline = false;
-  let started = false;
+  // Structure: [openFence, lb, (text)?, lb, (text)?, ..., lb, closeFence]
+  // The first lb is the separator after openFence; subsequent lbs each terminate
+  // a line of code (including empty ones).
+  const lines: string[] = [];
+  let currentLine = "";
+  let firstLineBreakSeen = false;
   for (let i = 1; i < children.length - 1; i++) {
     const child = children[i];
     if ($isLineBreakNode(child)) {
-      if (!started) {
-        started = true;
+      if (!firstLineBreakSeen) {
+        firstLineBreakSeen = true;
         continue;
       }
-      pendingNewline = true;
+      lines.push(currentLine);
+      currentLine = "";
       continue;
     }
     if ($isTextNode(child)) {
-      if (pendingNewline) {
-        text += "\n";
-        pendingNewline = false;
-      }
-      text += child.getTextContent();
+      currentLine += child.getTextContent();
     }
   }
-  return text;
+  return lines.join("\n");
 }
 
 function middleChildrenMatch(
@@ -208,21 +231,7 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const codeText = getCodeText(codeBlock);
   if (codeText === null) return;
 
-  let expected: ExpectedChild[];
-  if (grammar) {
-    const tokens = tokenize(codeText, grammar);
-    expected = expectedChildrenFromTokens(tokens);
-  } else {
-    const lines = codeText.split("\n");
-    expected = [{ kind: "linebreak" }];
-    lines.forEach((line, i) => {
-      if (i > 0) expected.push({ kind: "linebreak" });
-      if (line.length > 0) {
-        expected.push({ kind: "highlight", text: line, highlightType: null });
-      }
-    });
-    expected.push({ kind: "linebreak" });
-  }
+  const expected = expectedChildrenFromCodeText(codeText, grammar);
 
   const allChildren = codeBlock.getChildren();
   const middleChildren = allChildren.slice(1, -1);
