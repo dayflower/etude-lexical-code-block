@@ -7,6 +7,7 @@ import {
   $getNodeByKey,
   $getSelection,
   $isElementNode,
+  $isLineBreakNode,
   $isParagraphNode,
   $isRangeSelection,
   $isTextNode,
@@ -19,6 +20,7 @@ import {
   type LexicalEditor,
   type LexicalNode,
   ParagraphNode,
+  type PointType,
   TextNode,
 } from "lexical";
 import { useEffect, useRef } from "react";
@@ -230,22 +232,20 @@ function useInsertParagraphBehavior(editor: LexicalEditor): void {
 
         const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
         if (codeBlock) {
-          const firstChild = codeBlock.getFirstChild();
-          const lastChild = codeBlock.getLastChild();
+          const openFence = codeBlock.getFirstChild();
+          const closeFence = codeBlock.getLastChild();
 
           if (
-            $isMarkdownCodeFenceNode(anchorNode) &&
-            anchorNode.is(firstChild) &&
-            anchor.offset === 0
+            $isMarkdownCodeFenceNode(openFence) &&
+            $isCursorAtCodeBlockStart(anchor, codeBlock, openFence)
           ) {
             $exitCodeBlockBefore(codeBlock);
             return true;
           }
 
           if (
-            $isMarkdownCodeFenceNode(anchorNode) &&
-            anchorNode.is(lastChild) &&
-            anchor.offset === anchorNode.getTextContentSize()
+            $isMarkdownCodeFenceNode(closeFence) &&
+            $isCursorAtCodeBlockEnd(anchor, codeBlock, closeFence)
           ) {
             $exitCodeBlockAfter(codeBlock);
             return true;
@@ -319,6 +319,57 @@ function useEscapeKeyBehavior(editor: LexicalEditor): void {
   }, [editor]);
 }
 
+function $isCursorAtCodeBlockStart(
+  anchor: PointType,
+  codeBlock: MarkdownCodeBlockNode,
+  openFence: LexicalNode,
+): boolean {
+  const anchorNode = anchor.getNode();
+  if (anchorNode.is(openFence)) return anchor.offset === 0;
+  if (anchorNode.is(codeBlock)) return anchor.offset === 0;
+  return false;
+}
+
+function $isCursorAtCodeBlockEnd(
+  anchor: PointType,
+  codeBlock: MarkdownCodeBlockNode,
+  closeFence: LexicalNode,
+): boolean {
+  const anchorNode = anchor.getNode();
+  if (anchorNode.is(closeFence)) {
+    return anchor.offset === anchorNode.getTextContentSize();
+  }
+  if (anchorNode.is(codeBlock)) {
+    return anchor.offset >= codeBlock.getChildrenSize();
+  }
+  return false;
+}
+
+function $isCursorOnCloseFenceLine(
+  anchor: PointType,
+  codeBlock: MarkdownCodeBlockNode,
+  closeFence: LexicalNode,
+): boolean {
+  const anchorNode = anchor.getNode();
+  if (anchorNode.is(closeFence)) return true;
+
+  let scan: LexicalNode | null;
+  if (anchorNode.is(codeBlock)) {
+    if (anchor.offset >= codeBlock.getChildrenSize()) return true;
+    scan = codeBlock.getChildAtIndex(anchor.offset);
+  } else if (anchorNode.getParent()?.is(codeBlock)) {
+    scan = anchorNode.getNextSibling();
+  } else {
+    return false;
+  }
+
+  while (scan && !scan.is(closeFence)) {
+    if ($isLineBreakNode(scan)) return false;
+    scan = scan.getNextSibling();
+  }
+  return scan?.is(closeFence) ?? false;
+}
+
 function useArrowKeyExitBehavior(editor: LexicalEditor): void {
   useEffect(() => {
     function $tryExit(
@@ -331,14 +382,21 @@ function useArrowKeyExitBehavior(editor: LexicalEditor): void {
 
       const anchor = selection.anchor;
       const anchorNode = anchor.getNode();
-      if (!$isMarkdownCodeFenceNode(anchorNode)) return false;
 
       const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
       if (!codeBlock) return false;
-      if (!anchorNode.is(codeBlock.getLastChild())) return false;
       if (codeBlock.getNextSibling() !== null) return false;
-      if (requireEnd && anchor.offset !== anchorNode.getTextContentSize())
-        return false;
+
+      const closeFence = codeBlock.getLastChild();
+      if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+
+      if (requireEnd) {
+        if (!$isCursorAtCodeBlockEnd(anchor, codeBlock, closeFence))
+          return false;
+      } else {
+        if (!$isCursorOnCloseFenceLine(anchor, codeBlock, closeFence))
+          return false;
+      }
 
       event?.preventDefault();
       $exitCodeBlockAfter(codeBlock);

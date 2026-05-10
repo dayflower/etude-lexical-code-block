@@ -76,15 +76,17 @@ function expectedChildrenFromCodeText(
   grammar: Prism.Grammar | null,
 ): ExpectedChild[] {
   // Structure invariant: the middle of a code block always begins with a
-  // separator linebreak (after openFence). For each line of code, we then
-  // emit zero or more highlight tokens followed by a linebreak. So an empty
-  // code block has just one linebreak.
+  // separator linebreak (after openFence). For each line of code (including
+  // the sole empty line of an otherwise empty block), we then emit zero or
+  // more highlight tokens followed by a terminating linebreak.
   const result: ExpectedChild[] = [{ kind: "linebreak" }];
-  if (codeText.length === 0) return result;
 
-  const flat: FlatToken[] = grammar
-    ? tokenize(codeText, grammar)
-    : [{ type: null, content: codeText }];
+  const flat: FlatToken[] =
+    codeText.length === 0
+      ? []
+      : grammar
+        ? tokenize(codeText, grammar)
+        : [{ type: null, content: codeText }];
 
   const lineTokens: FlatToken[][] = [[]];
   for (const token of flat) {
