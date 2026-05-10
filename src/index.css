@@ -24,6 +24,10 @@
   color: transparent;
 }
 
+.always-show-fences .markdown-code-block:not(.is-focused) .markdown-code-fence {
+  color: #94a3b8;
+}
+
 .markdown-code-block.is-focused {
   background-color: #eef2f7;
 }
