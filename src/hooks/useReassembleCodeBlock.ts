@@ -38,7 +38,7 @@ function $buildCodeBlockFromParagraphs(
   }
 }
 
-function $tryReassembleFromClose(paragraph: ParagraphNode): boolean {
+function $tryReassembleAsCloseFence(paragraph: ParagraphNode): boolean {
   if (!OPEN_FENCE_REGEX.test(paragraph.getTextContent())) return false;
 
   const middles: ParagraphNode[] = [];
@@ -58,7 +58,7 @@ function $tryReassembleFromClose(paragraph: ParagraphNode): boolean {
   return false;
 }
 
-function $tryReassembleFromOpen(paragraph: ParagraphNode): boolean {
+function $tryReassembleAsOpenFence(paragraph: ParagraphNode): boolean {
   const match = OPEN_FENCE_REGEX.exec(paragraph.getTextContent());
   if (!match) return false;
   const language = match[1] ?? "";
@@ -80,8 +80,8 @@ function $tryReassembleFromOpen(paragraph: ParagraphNode): boolean {
 export function useReassembleCodeBlock(editor: LexicalEditor): void {
   useEffect(() => {
     const $reassembleAtParagraph = (paragraph: ParagraphNode) => {
-      if ($tryReassembleFromClose(paragraph)) return;
-      $tryReassembleFromOpen(paragraph);
+      if ($tryReassembleAsCloseFence(paragraph)) return;
+      $tryReassembleAsOpenFence(paragraph);
     };
 
     const removeParagraph = editor.registerNodeTransform(
