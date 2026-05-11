@@ -8,6 +8,7 @@ import {
 import {
   $appendCodeBlockChildren,
   $isMarkdownCodeBlockNode,
+  $isMarkdownCodeFenceNode,
   type MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
@@ -28,12 +29,14 @@ export function $findNearestMarkdownCodeBlockNode(
 export function $extractValidCodeBlockInfo(
   codeBlock: MarkdownCodeBlockNode,
 ): { language: string } | null {
-  const text = codeBlock.getTextContent();
-  const lines = text.split("\n");
-  if (lines.length < 2) return null;
-  const openMatch = OPEN_FENCE_REGEX.exec(lines[0]);
+  const first = codeBlock.getFirstChild();
+  const last = codeBlock.getLastChild();
+  if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
+    return null;
+  }
+  const openMatch = OPEN_FENCE_REGEX.exec(first.getTextContent());
   if (!openMatch) return null;
-  if (!CLOSE_FENCE_REGEX.test(lines[lines.length - 1])) return null;
+  if (!CLOSE_FENCE_REGEX.test(last.getTextContent())) return null;
   return { language: openMatch[1] ?? "" };
 }
 
@@ -41,16 +44,15 @@ export function $normalizeCodeBlock(
   codeBlock: MarkdownCodeBlockNode,
   language: string,
 ): void {
-  const lines = codeBlock.getTextContent().split("\n");
+  const codeText = codeBlock.getCodeText() ?? "";
+  const codeLines = codeText.split("\n");
+  const openFenceText =
+    codeBlock.getFirstChild()?.getTextContent() ?? `\`\`\`${language}`;
+  const closeFenceText = codeBlock.getLastChild()?.getTextContent() ?? "```";
   for (const child of codeBlock.getChildren()) {
     child.remove();
   }
-  $appendCodeBlockChildren(
-    codeBlock,
-    lines[0],
-    lines.slice(1, -1),
-    lines[lines.length - 1],
-  );
+  $appendCodeBlockChildren(codeBlock, openFenceText, codeLines, closeFenceText);
   if (codeBlock.getLanguage() !== language) {
     codeBlock.setLanguage(language);
   }

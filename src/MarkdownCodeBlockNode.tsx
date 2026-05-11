@@ -1,6 +1,8 @@
 import { $createCodeHighlightNode } from "@lexical/code-core";
 import {
   $createLineBreakNode,
+  $isLineBreakNode,
+  $isTextNode,
   type DOMConversionMap,
   type DOMConversionOutput,
   type EditorConfig,
@@ -80,6 +82,38 @@ export class MarkdownCodeBlockNode extends ElementNode {
 
   getLanguage(): string {
     return this.getLatest().__language;
+  }
+
+  // Returns the middle content (between the fences) joined with "\n". The
+  // first linebreak after the open fence is the structural separator and is
+  // excluded. Returns null when the surrounding fences are missing.
+  getCodeText(): string | null {
+    const children = this.getChildren();
+    if (children.length < 2) return null;
+    const first = children[0];
+    const last = children[children.length - 1];
+    if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
+      return null;
+    }
+    const lines: string[] = [];
+    let currentLine = "";
+    let firstLineBreakSeen = false;
+    for (let i = 1; i < children.length - 1; i++) {
+      const child = children[i];
+      if ($isLineBreakNode(child)) {
+        if (!firstLineBreakSeen) {
+          firstLineBreakSeen = true;
+          continue;
+        }
+        lines.push(currentLine);
+        currentLine = "";
+        continue;
+      }
+      if ($isTextNode(child)) {
+        currentLine += child.getTextContent();
+      }
+    }
+    return lines.join("\n");
   }
 }
 
