@@ -24,10 +24,7 @@ import "prismjs/components/prism-bash";
 import "prismjs/components/prism-python";
 import "prismjs/components/prism-markup";
 import { useEffect } from "react";
-import {
-  $isMarkdownCodeFenceNode,
-  MarkdownCodeBlockNode,
-} from "./MarkdownCodeBlockNode";
+import { MarkdownCodeBlockNode } from "./MarkdownCodeBlockNode";
 
 type FlatToken = { type: string | null; content: string };
 
@@ -115,38 +112,6 @@ function expectedChildrenFromCodeText(
   return result;
 }
 
-function getCodeText(codeBlock: MarkdownCodeBlockNode): string | null {
-  const children = codeBlock.getChildren();
-  if (children.length < 2) return null;
-  const first = children[0];
-  const last = children[children.length - 1];
-  if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
-    return null;
-  }
-  // Structure: [openFence, lb, (text)?, lb, (text)?, ..., lb, closeFence]
-  // The first lb is the separator after openFence; subsequent lbs each terminate
-  // a line of code (including empty ones).
-  const lines: string[] = [];
-  let currentLine = "";
-  let firstLineBreakSeen = false;
-  for (let i = 1; i < children.length - 1; i++) {
-    const child = children[i];
-    if ($isLineBreakNode(child)) {
-      if (!firstLineBreakSeen) {
-        firstLineBreakSeen = true;
-        continue;
-      }
-      lines.push(currentLine);
-      currentLine = "";
-      continue;
-    }
-    if ($isTextNode(child)) {
-      currentLine += child.getTextContent();
-    }
-  }
-  return lines.join("\n");
-}
-
 function middleChildrenMatch(
   actual: LexicalNode[],
   expected: ExpectedChild[],
@@ -230,7 +195,7 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const language = codeBlock.getLanguage();
   const grammar = resolveGrammar(language);
 
-  const codeText = getCodeText(codeBlock);
+  const codeText = codeBlock.getCodeText();
   if (codeText === null) return;
 
   const expected = expectedChildrenFromCodeText(codeText, grammar);
