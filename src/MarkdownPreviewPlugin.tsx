@@ -3,6 +3,10 @@ import {
   $getRoot,
   $isParagraphNode,
   $isTextNode,
+  IS_BOLD,
+  IS_CODE,
+  IS_ITALIC,
+  IS_STRIKETHROUGH,
   type LexicalNode,
 } from "lexical";
 import { useEffect } from "react";
@@ -10,10 +14,10 @@ import { $isMarkdownCodeBlockNode } from "./MarkdownCodeBlockNode";
 
 function applyTextFormat(text: string, format: number): string {
   let result = text;
-  if (format & 16) result = `\`${result}\``;
-  if (format & 4) result = `~~${result}~~`;
-  if (format & 2) result = `*${result}*`;
-  if (format & 1) result = `**${result}**`;
+  if (format & IS_CODE) result = `\`${result}\``;
+  if (format & IS_STRIKETHROUGH) result = `~~${result}~~`;
+  if (format & IS_ITALIC) result = `*${result}*`;
+  if (format & IS_BOLD) result = `**${result}**`;
   return result;
 }
 
