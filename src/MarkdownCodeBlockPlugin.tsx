@@ -1,7 +1,5 @@
-import { $createCodeHighlightNode } from "@lexical/code-core";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
-  $createLineBreakNode,
   $createParagraphNode,
   $createTextNode,
   $getNodeByKey,
@@ -26,8 +24,8 @@ import {
 import { useEffect, useRef } from "react";
 import { CSS_CLASSES } from "./constants";
 import {
+  $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
-  $createMarkdownCodeFenceNode,
   $isMarkdownCodeBlockNode,
   $isMarkdownCodeFenceNode,
   MarkdownCodeBlockNode,
@@ -63,20 +61,16 @@ function $normalizeCodeBlock(
   codeBlock: MarkdownCodeBlockNode,
   language: string,
 ): void {
-  const text = codeBlock.getTextContent();
-  const lines = text.split("\n");
+  const lines = codeBlock.getTextContent().split("\n");
   for (const child of codeBlock.getChildren()) {
     child.remove();
   }
-  codeBlock.append($createMarkdownCodeFenceNode(lines[0]));
-  for (let i = 1; i < lines.length - 1; i++) {
-    codeBlock.append($createLineBreakNode());
-    if (lines[i].length > 0) {
-      codeBlock.append($createCodeHighlightNode(lines[i]));
-    }
-  }
-  codeBlock.append($createLineBreakNode());
-  codeBlock.append($createMarkdownCodeFenceNode(lines[lines.length - 1]));
+  $appendCodeBlockChildren(
+    codeBlock,
+    lines[0],
+    lines.slice(1, -1),
+    lines[lines.length - 1],
+  );
   if (codeBlock.getLanguage() !== language) {
     codeBlock.setLanguage(language);
   }
@@ -116,26 +110,22 @@ function $buildCodeBlockFromParagraphs(
   language: string,
 ): void {
   const codeBlock = $createMarkdownCodeBlockNode(language);
-  codeBlock.append(
-    $createMarkdownCodeFenceNode(openParagraph.getTextContent()),
-  );
-  for (const mid of middleParagraphs) {
-    codeBlock.append($createLineBreakNode());
-    const text = mid.getTextContent();
-    if (text.length > 0) {
-      codeBlock.append($createCodeHighlightNode(text));
-    }
-  }
   const closeFenceText = closeParagraph.getTextContent();
-  codeBlock.append($createLineBreakNode());
-  const closeFenceNode = $createMarkdownCodeFenceNode(closeFenceText);
-  codeBlock.append(closeFenceNode);
+  $appendCodeBlockChildren(
+    codeBlock,
+    openParagraph.getTextContent(),
+    middleParagraphs.map((p) => p.getTextContent()),
+    closeFenceText,
+  );
 
   openParagraph.replace(codeBlock);
   for (const mid of middleParagraphs) mid.remove();
   closeParagraph.remove();
 
-  closeFenceNode.select(closeFenceText.length, closeFenceText.length);
+  const closeFenceNode = codeBlock.getLastChild();
+  if ($isMarkdownCodeFenceNode(closeFenceNode)) {
+    closeFenceNode.select(closeFenceText.length, closeFenceText.length);
+  }
 }
 
 function $tryReassembleFromClose(paragraph: ParagraphNode): boolean {
@@ -266,11 +256,11 @@ function useInsertParagraphBehavior(editor: LexicalEditor): void {
 
         const language = match[1] ?? "";
         const codeBlockNode = $createMarkdownCodeBlockNode(language);
-        codeBlockNode.append(
-          $createMarkdownCodeFenceNode(`\`\`\`${language}`),
-          $createLineBreakNode(),
-          $createLineBreakNode(),
-          $createMarkdownCodeFenceNode("```"),
+        $appendCodeBlockChildren(
+          codeBlockNode,
+          `\`\`\`${language}`,
+          [""],
+          "```",
         );
         parent.replace(codeBlockNode);
         codeBlockNode.select(2, 2);

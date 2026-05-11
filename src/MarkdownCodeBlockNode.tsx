@@ -124,20 +124,33 @@ function $convertPreElement(domNode: HTMLElement): DOMConversionOutput {
   const lines = text.split("\n");
 
   const codeBlock = $createMarkdownCodeBlockNode(language);
-  codeBlock.append($createMarkdownCodeFenceNode(`\`\`\`${language}`));
-  for (const line of lines) {
+  $appendCodeBlockChildren(codeBlock, `\`\`\`${language}`, lines, "```");
+
+  return {
+    node: codeBlock,
+    forChild: () => null,
+  };
+}
+
+// Builds the canonical code block child layout:
+//   [ openFence, lb, (highlight)?, lb, (highlight)?, ..., lb, closeFence ]
+// `codeLines` is the list of middle lines (no fence rows). For an "empty" block
+// pass `[""]` so the resulting structure has a single editable middle line.
+export function $appendCodeBlockChildren(
+  codeBlock: MarkdownCodeBlockNode,
+  openFenceText: string,
+  codeLines: string[],
+  closeFenceText: string,
+): void {
+  codeBlock.append($createMarkdownCodeFenceNode(openFenceText));
+  for (const line of codeLines) {
     codeBlock.append($createLineBreakNode());
     if (line.length > 0) {
       codeBlock.append($createCodeHighlightNode(line));
     }
   }
   codeBlock.append($createLineBreakNode());
-  codeBlock.append($createMarkdownCodeFenceNode("```"));
-
-  return {
-    node: codeBlock,
-    forChild: () => null,
-  };
+  codeBlock.append($createMarkdownCodeFenceNode(closeFenceText));
 }
 
 export class MarkdownCodeFenceNode extends TextNode {
