@@ -11,6 +11,7 @@ import {
   $isTextNode,
   type LexicalEditor,
   type LexicalNode,
+  type TextNode,
 } from "lexical";
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
@@ -24,7 +25,10 @@ import "prismjs/components/prism-bash";
 import "prismjs/components/prism-python";
 import "prismjs/components/prism-markup";
 import { useEffect } from "react";
-import { MarkdownCodeBlockNode } from "./MarkdownCodeBlockNode";
+import {
+  $isMarkdownCodeFenceNode,
+  MarkdownCodeBlockNode,
+} from "./MarkdownCodeBlockNode";
 
 type FlatToken = { type: string | null; content: string };
 
@@ -132,11 +136,26 @@ function middleChildrenMatch(
   return true;
 }
 
+// Offset is expressed in the block's flat text-content space, summing the
+// sizes of every child (including the open/close fences). Capture and restore
+// stay symmetric as long as both sides walk the same children sequence.
 function getOffsetInBlock(
   block: MarkdownCodeBlockNode,
   node: LexicalNode,
   offset: number,
 ): number | null {
+  // Element-type selection on the block itself: offset is a child index.
+  // Lexical lands here after $insertLineBreak when the new LB's next sibling
+  // is not a text node (e.g. another LineBreakNode).
+  if (node.is(block)) {
+    const children = block.getChildren();
+    let pos = 0;
+    for (let i = 0; i < offset && i < children.length; i++) {
+      pos += children[i].getTextContentSize();
+    }
+    return pos;
+  }
+
   let cur: LexicalNode | null = node;
   while (cur && cur.getParent()?.getKey() !== block.getKey()) {
     cur = cur.getParent();
@@ -150,6 +169,15 @@ function getOffsetInBlock(
   return null;
 }
 
+// Code-content cursor targets are CodeHighlightNodes or empty-line positions
+// between LineBreakNodes. The open/close fences are TextNodes but never valid
+// targets — exclude them via this guard.
+function $isUsableCursorText(
+  node: LexicalNode | null | undefined,
+): node is TextNode {
+  return !!node && $isTextNode(node) && !$isMarkdownCodeFenceNode(node);
+}
+
 function setOffsetInBlock(
   block: MarkdownCodeBlockNode,
   offset: number,
@@ -159,31 +187,43 @@ function setOffsetInBlock(
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
     const size = child.getTextContentSize();
+
+    // Boundary: cursor is exactly before this child.
+    if (remaining === 0 && $isLineBreakNode(child)) {
+      const prev = children[i - 1];
+      if ($isUsableCursorText(prev)) {
+        const prevSize = prev.getTextContentSize();
+        prev.select(prevSize, prevSize);
+        return true;
+      }
+      // Empty line (prev is another LB or the open fence): anchor element-type
+      // selection on the block at this child index.
+      block.select(i, i);
+      return true;
+    }
+
     if (remaining <= size) {
-      if ($isTextNode(child)) {
+      if ($isUsableCursorText(child)) {
         child.select(remaining, remaining);
         return true;
       }
       if ($isLineBreakNode(child)) {
-        if (remaining === 0) {
-          const prev = children[i - 1];
-          if (prev && $isTextNode(prev)) {
-            const prevSize = prev.getTextContentSize();
-            prev.select(prevSize, prevSize);
-            return true;
-          }
-        }
+        // remaining must be size (=1): cursor is right after this LB.
         const next = children[i + 1];
-        if (next && $isTextNode(next)) {
+        if ($isUsableCursorText(next)) {
           next.select(0, 0);
           return true;
         }
+        // Next is another LB or close fence — empty line position.
+        block.select(i + 1, i + 1);
+        return true;
       }
     }
     remaining -= size;
   }
+
   const last = children[children.length - 1];
-  if (last && $isTextNode(last)) {
+  if ($isUsableCursorText(last)) {
     const size = last.getTextContentSize();
     last.select(size, size);
     return true;
