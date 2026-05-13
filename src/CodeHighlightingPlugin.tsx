@@ -169,9 +169,11 @@ function getOffsetInBlock(
   return null;
 }
 
-// Code-content cursor targets are CodeHighlightNodes or empty-line positions
-// between LineBreakNodes. The open/close fences are TextNodes but never valid
-// targets — exclude them via this guard.
+// For LineBreak-boundary checks where the saved offset sits exactly between
+// two structural children: prefer landing on a content TextNode and fall back
+// to an element-type selection on the block when only a fence is adjacent.
+// Used only at boundaries — within a fence's text range we still want the
+// cursor to land on the fence itself.
 function $isUsableCursorText(
   node: LexicalNode | null | undefined,
 ): node is TextNode {
@@ -203,7 +205,9 @@ function setOffsetInBlock(
     }
 
     if (remaining <= size) {
-      if ($isUsableCursorText(child)) {
+      if ($isTextNode(child)) {
+        // Inside a fence's text range is a legitimate cursor target too
+        // (e.g. between the ``` marker and the language label).
         child.select(remaining, remaining);
         return true;
       }

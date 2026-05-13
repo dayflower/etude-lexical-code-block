@@ -113,6 +113,25 @@ export function $isCursorAtCodeBlockEnd(
   return false;
 }
 
+// Canonical child layout is [openFence, LB(sep), firstContent, ...]. The
+// "very start of the first content line" sits just after the separator LB,
+// either as an element-type anchor on the block at offset 2 (empty first
+// line) or as a text-type anchor at offset 0 of the first content child.
+export function $isCursorAtFirstContentLineStart(
+  anchor: PointType,
+  codeBlock: MarkdownCodeBlockNode,
+): boolean {
+  const anchorNode = anchor.getNode();
+
+  if (anchorNode.is(codeBlock)) {
+    return anchor.offset === 2;
+  }
+
+  if (anchor.offset !== 0) return false;
+  const firstContent = codeBlock.getChildAtIndex(2);
+  return firstContent !== null && anchorNode.is(firstContent);
+}
+
 export function $isCursorOnCloseFenceLine(
   anchor: PointType,
   codeBlock: MarkdownCodeBlockNode,
