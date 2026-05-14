@@ -11,6 +11,7 @@ import {
 import { useEffect } from "react";
 import {
   $findNearestMarkdownCodeBlockNode,
+  $isCursorAtCloseFenceLineStart,
   $isCursorAtFirstContentLineStart,
   OPEN_FENCE_REGEX,
 } from "../codeBlockOps";
@@ -68,6 +69,42 @@ function $mergeFirstContentLineIntoOpenFence(
   return true;
 }
 
+// Caret sits at the start of the close-fence line (just after the last LB).
+// Backspace at the start of a line normally joins it with the previous one;
+// applied here that means removing the LB so the close fence sits on the same
+// visual line as the last content. Lexical's default does delete the LB, but
+// the resulting "no LB before closeFence" layout then trips up
+// CodeHighlightingPlugin's rebuild (see expectedChildrenFromCodeText) — so we
+// handle it ourselves and leave the structure intact for the plugin to keep.
+function $mergeCloseFenceIntoLastContentLine(
+  codeBlock: MarkdownCodeBlockNode,
+): boolean {
+  const closeFence = codeBlock.getLastChild();
+  if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+
+  const lastLB = closeFence.getPreviousSibling();
+  if (!$isLineBreakNode(lastLB)) return false;
+
+  const before = lastLB.getPreviousSibling();
+  if (!before) return false;
+
+  if ($isTextNode(before) && !$isMarkdownCodeFenceNode(before)) {
+    // Last line carries content: drop the LB and park the caret at the join
+    // point (end of the content, immediately before the close fence text).
+    const size = before.getTextContentSize();
+    lastLB.remove();
+    before.select(size, size);
+    return true;
+  }
+
+  // Empty trailing line (prev is another LB) or no content (prev is the open
+  // fence). Don't collapse further — just slide the caret up onto the empty
+  // line above so a second Backspace can clean it up via Lexical's default.
+  const index = lastLB.getIndexWithinParent();
+  codeBlock.select(index, index);
+  return true;
+}
+
 export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
   useEffect(() => {
     const remove = editor.registerCommand(
@@ -81,12 +118,25 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
         const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
         if (!codeBlock) return false;
 
-        if (!$isCursorAtFirstContentLineStart(anchor, codeBlock)) return false;
-
-        if ($mergeFirstContentLineIntoOpenFence(codeBlock)) {
-          event?.preventDefault();
-          return true;
+        if ($isCursorAtFirstContentLineStart(anchor, codeBlock)) {
+          if ($mergeFirstContentLineIntoOpenFence(codeBlock)) {
+            event?.preventDefault();
+            return true;
+          }
+          return false;
         }
+
+        const closeFence = codeBlock.getLastChild();
+        if (
+          $isMarkdownCodeFenceNode(closeFence) &&
+          $isCursorAtCloseFenceLineStart(anchor, codeBlock, closeFence)
+        ) {
+          if ($mergeCloseFenceIntoLastContentLine(codeBlock)) {
+            event?.preventDefault();
+            return true;
+          }
+        }
+
         return false;
       },
       COMMAND_PRIORITY_LOW,

@@ -87,6 +87,12 @@ export class MarkdownCodeBlockNode extends ElementNode {
   // Returns the middle content (between the fences) joined with "\n". The
   // first linebreak after the open fence is the structural separator and is
   // excluded. Returns null when the surrounding fences are missing.
+  //
+  // The canonical layout terminates the last content line with an LB before
+  // the close fence, so the loop alone is enough. When the close fence has
+  // been merged onto the last content line (no terminating LB), the last line
+  // is still pending in `currentLine` at loop end — flush it so we don't drop
+  // text under that transient state.
   getCodeText(): string | null {
     const children = this.getChildren();
     if (children.length < 2) return null;
@@ -112,6 +118,9 @@ export class MarkdownCodeBlockNode extends ElementNode {
       if ($isTextNode(child)) {
         currentLine += child.getTextContent();
       }
+    }
+    if (currentLine.length > 0) {
+      lines.push(currentLine);
     }
     return lines.join("\n");
   }

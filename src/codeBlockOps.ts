@@ -37,6 +37,10 @@ export function $extractValidCodeBlockInfo(
   const openMatch = OPEN_FENCE_REGEX.exec(first.getTextContent());
   if (!openMatch) return null;
   if (!CLOSE_FENCE_REGEX.test(last.getTextContent())) return null;
+  // The close fence must sit on its own line. The "merged" transient state
+  // (no LB between last content and close fence) is allowed while focused but
+  // is not a persistable layout — let the caller unwrap it on blur.
+  if (!$isLineBreakNode(last.getPreviousSibling())) return null;
   return { language: openMatch[1] ?? "" };
 }
 
@@ -130,6 +134,23 @@ export function $isCursorAtFirstContentLineStart(
   if (anchor.offset !== 0) return false;
   const firstContent = codeBlock.getChildAtIndex(2);
   return firstContent !== null && anchorNode.is(firstContent);
+}
+
+// Mirror of $isCursorAtFirstContentLineStart for the opposite end. The "very
+// start of the close fence line" sits just before the closeFence, either as an
+// element-type anchor on the block at offset (childrenSize - 1) or as a
+// text-type anchor at offset 0 of the close fence.
+export function $isCursorAtCloseFenceLineStart(
+  anchor: PointType,
+  codeBlock: MarkdownCodeBlockNode,
+  closeFence: LexicalNode,
+): boolean {
+  const anchorNode = anchor.getNode();
+  if (anchorNode.is(closeFence)) return anchor.offset === 0;
+  if (anchorNode.is(codeBlock)) {
+    return anchor.offset === codeBlock.getChildrenSize() - 1;
+  }
+  return false;
 }
 
 export function $isCursorOnCloseFenceLine(

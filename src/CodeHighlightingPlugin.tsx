@@ -75,11 +75,17 @@ function tokenize(code: string, grammar: Prism.Grammar): FlatToken[] {
 function expectedChildrenFromCodeText(
   codeText: string,
   grammar: Prism.Grammar | null,
+  trailingLineBreak: boolean,
 ): ExpectedChild[] {
   // Structure invariant: the middle of a code block always begins with a
   // separator linebreak (after openFence). For each line of code (including
   // the sole empty line of an otherwise empty block), we then emit zero or
   // more highlight tokens followed by a terminating linebreak.
+  //
+  // `trailingLineBreak` mirrors the current structure: when the close fence
+  // has been merged onto the last content line (caret moved up via Backspace
+  // at the close-fence-line start), the final LB is dropped so the rebuild
+  // does not silently re-canonicalize that transient state.
   const result: ExpectedChild[] = [{ kind: "linebreak" }];
 
   const flat: FlatToken[] =
@@ -112,6 +118,9 @@ function expectedChildrenFromCodeText(
       });
     }
     result.push({ kind: "linebreak" });
+  }
+  if (!trailingLineBreak && result.length > 0) {
+    result.pop();
   }
   return result;
 }
@@ -242,7 +251,19 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const codeText = codeBlock.getCodeText();
   if (codeText === null) return;
 
-  const expected = expectedChildrenFromCodeText(codeText, grammar);
+  // Preserve the "close fence merged with last content line" transient state
+  // (see $mergeCloseFenceIntoLastContentLine). If the close fence's previous
+  // sibling is not an LB, the structure has no trailing LB and the rebuild
+  // must not invent one.
+  const closeFence = codeBlock.getLastChild();
+  const trailingLineBreak = closeFence
+    ? $isLineBreakNode(closeFence.getPreviousSibling())
+    : true;
+  const expected = expectedChildrenFromCodeText(
+    codeText,
+    grammar,
+    trailingLineBreak,
+  );
 
   const allChildren = codeBlock.getChildren();
   const middleChildren = allChildren.slice(1, -1);
@@ -256,7 +277,6 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   }
 
   for (const child of middleChildren) child.remove();
-  const closeFence = codeBlock.getLastChild();
   if (!closeFence) return;
   for (const item of expected) {
     const node =
