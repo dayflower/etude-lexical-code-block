@@ -101,27 +101,31 @@ function $hasInternalLineBreak(paragraph: ParagraphNode): boolean {
   return false;
 }
 
+// A multi-line paragraph whose first line is a fence marker is the
+// dissolved-then-split state produced when Backspace collapses the
+// code block above a content paragraph and a later Enter splits the
+// resulting blob. Break it into one paragraph per line so the regular
+// fence-pair scan can pick it up. Returns true once this path has been
+// taken (regardless of whether reassembly ultimately succeeds), so the
+// caller does not fall through to the regular scan.
+function $tryRecoverFromDissolvedBlock(paragraph: ParagraphNode): boolean {
+  if (!$hasInternalLineBreak(paragraph)) return false;
+  const firstLine = paragraph.getTextContent().split("\n", 1)[0];
+  if (parseOpenFence(firstLine) === null) return false;
+
+  const split = $splitParagraphAtLineBreaks(paragraph);
+  const first = split[0];
+  if (first) {
+    if ($tryReassembleAsCloseFence(first)) return true;
+    $tryReassembleAsOpenFence(first);
+  }
+  return true;
+}
+
 export function useReassembleCodeBlock(editor: LexicalEditor): void {
   useEffect(() => {
     const $reassembleAtParagraph = (paragraph: ParagraphNode) => {
-      // A multi-line paragraph whose first line is a fence marker is the
-      // dissolved-then-split state produced when Backspace collapses the
-      // code block above a content paragraph and a later Enter splits the
-      // resulting blob. Break it into one paragraph per line so the regular
-      // fence-pair scan below can pick it up.
-      if ($hasInternalLineBreak(paragraph)) {
-        const firstLine = paragraph.getTextContent().split("\n", 1)[0];
-        if (parseOpenFence(firstLine) !== null) {
-          const split = $splitParagraphAtLineBreaks(paragraph);
-          const first = split[0];
-          if (first) {
-            if ($tryReassembleAsCloseFence(first)) return;
-            $tryReassembleAsOpenFence(first);
-          }
-          return;
-        }
-      }
-
+      if ($tryRecoverFromDissolvedBlock(paragraph)) return;
       if ($tryReassembleAsCloseFence(paragraph)) return;
       $tryReassembleAsOpenFence(paragraph);
     };
