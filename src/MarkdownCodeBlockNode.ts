@@ -88,11 +88,13 @@ export class MarkdownCodeBlockNode extends ElementNode {
   // first linebreak after the open fence is the structural separator and is
   // excluded. Returns null when the surrounding fences are missing.
   //
-  // The canonical layout terminates the last content line with an LB before
-  // the close fence, so the loop alone is enough. When the close fence has
-  // been merged onto the last content line (no terminating LB), the last line
-  // is still pending in `currentLine` at loop end — flush it so we don't drop
-  // text under that transient state.
+  // Convention: always flush the trailing buffered line at loop end. Under
+  // the canonical layout the trailing LB pushes the last line before the
+  // loop exits, so the flush is a no-op; under the transient "close fence
+  // merged" layout the flush emits the last line. The returned string
+  // reflects the textual content regardless of layout — callers that need
+  // to distinguish canonical vs. transient should consult
+  // `hasTrailingLineBreak()` instead of inspecting children.
   getCodeText(): string | null {
     const children = this.getChildren();
     if (children.length < 2) return null;
@@ -123,6 +125,20 @@ export class MarkdownCodeBlockNode extends ElementNode {
       lines.push(currentLine);
     }
     return lines.join("\n");
+  }
+
+  // True when the structure has a terminating linebreak between the last
+  // content node and the close fence (canonical layout). False under the
+  // transient "close fence merged onto the last content line" state created
+  // by close-fence-line-start Backspace.
+  //
+  // Returns true when the close fence is missing (degenerate structure):
+  // callers that depend on the close fence's existence guard separately, and
+  // the "no transient state" default keeps rebuilders from inventing layout.
+  hasTrailingLineBreak(): boolean {
+    const last = this.getLastChild();
+    if (!$isMarkdownCodeFenceNode(last)) return true;
+    return $isLineBreakNode(last.getPreviousSibling());
   }
 }
 

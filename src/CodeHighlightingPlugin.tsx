@@ -242,14 +242,11 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const codeText = codeBlock.getCodeText();
   if (codeText === null) return;
 
-  // Preserve the "close fence merged with last content line" transient state
-  // (see $mergeCloseFenceIntoLastContentLine). If the close fence's previous
-  // sibling is not an LB, the structure has no trailing LB and the rebuild
-  // must not invent one.
+  // Preserve the "close fence merged with last content line" transient
+  // state (see $mergeCloseFenceIntoLastContentLine). The rebuild must not
+  // invent a trailing LB when the structure currently has none.
   const closeFence = codeBlock.getLastChild();
-  const trailingLineBreak = closeFence
-    ? $isLineBreakNode(closeFence.getPreviousSibling())
-    : true;
+  const trailingLineBreak = codeBlock.hasTrailingLineBreak();
   const expected = expectedChildrenFromCodeText(
     codeText,
     grammar,

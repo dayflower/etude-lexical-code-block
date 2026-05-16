@@ -52,7 +52,7 @@ export function $extractValidCodeBlockInfo(
   // The close fence must sit on its own line. The "merged" transient state
   // (no LB between last content and close fence) is allowed while focused but
   // is not a persistable layout — let the caller unwrap it on blur.
-  if (!$isLineBreakNode(last.getPreviousSibling())) return null;
+  if (!codeBlock.hasTrailingLineBreak()) return null;
   return { language: parsedOpen.language };
 }
 
@@ -60,6 +60,11 @@ export function $normalizeCodeBlock(
   codeBlock: MarkdownCodeBlockNode,
   language: string,
 ): void {
+  // Always rebuild as the canonical layout (trailing LB before close fence),
+  // regardless of `codeBlock.hasTrailingLineBreak()`. This collapses the
+  // transient "close fence merged" state on blur — preserving the merged
+  // state across focus loss is not desired, so we intentionally do not
+  // consult the predicate here.
   const codeText = codeBlock.getCodeText() ?? "";
   const codeLines = codeText.split("\n");
   const openFenceText =
