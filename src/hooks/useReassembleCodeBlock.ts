@@ -1,4 +1,7 @@
 import {
+  $createParagraphNode,
+  $createTextNode,
+  $isLineBreakNode,
   $isParagraphNode,
   type LexicalEditor,
   type LexicalNode,
@@ -77,9 +80,60 @@ function $tryReassembleAsOpenFence(paragraph: ParagraphNode): boolean {
   return false;
 }
 
+// Replace a paragraph that contains internal LineBreakNodes with one paragraph
+// per line (by text content), returning the new paragraphs. Used to recover
+// from dissolved code blocks where Lexical's default Backspace collapsed the
+// fences and middle content into a single paragraph.
+function $splitParagraphAtLineBreaks(
+  paragraph: ParagraphNode,
+): ParagraphNode[] {
+  const text = paragraph.getTextContent();
+  const lines = text.split("\n");
+  if (lines.length <= 1) return [paragraph];
+
+  const created: ParagraphNode[] = [];
+  let prev: LexicalNode = paragraph;
+  for (const line of lines) {
+    const newPara = $createParagraphNode();
+    if (line.length > 0) {
+      newPara.append($createTextNode(line));
+    }
+    prev.insertAfter(newPara);
+    prev = newPara;
+    created.push(newPara);
+  }
+  paragraph.remove();
+  return created;
+}
+
+function $hasInternalLineBreak(paragraph: ParagraphNode): boolean {
+  for (const child of paragraph.getChildren()) {
+    if ($isLineBreakNode(child)) return true;
+  }
+  return false;
+}
+
 export function useReassembleCodeBlock(editor: LexicalEditor): void {
   useEffect(() => {
     const $reassembleAtParagraph = (paragraph: ParagraphNode) => {
+      // A multi-line paragraph whose first line is a fence marker is the
+      // dissolved-then-split state produced when Backspace collapses the
+      // code block above a content paragraph and a later Enter splits the
+      // resulting blob. Break it into one paragraph per line so the regular
+      // fence-pair scan below can pick it up.
+      if ($hasInternalLineBreak(paragraph)) {
+        const firstLine = paragraph.getTextContent().split("\n", 1)[0];
+        if (OPEN_FENCE_REGEX.test(firstLine)) {
+          const split = $splitParagraphAtLineBreaks(paragraph);
+          const first = split[0];
+          if (first) {
+            if ($tryReassembleAsCloseFence(first)) return;
+            $tryReassembleAsOpenFence(first);
+          }
+          return;
+        }
+      }
+
       if ($tryReassembleAsCloseFence(paragraph)) return;
       $tryReassembleAsOpenFence(paragraph);
     };

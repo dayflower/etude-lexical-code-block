@@ -1,6 +1,7 @@
 import {
   $getSelection,
   $isLineBreakNode,
+  $isParagraphNode,
   $isRangeSelection,
   $isTextNode,
   COMMAND_PRIORITY_LOW,
@@ -12,6 +13,7 @@ import { useEffect } from "react";
 import {
   $findNearestMarkdownCodeBlockNode,
   $isCursorAtCloseFenceLineStart,
+  $isCursorAtCodeBlockStart,
   $isCursorAtFirstContentLineStart,
   OPEN_FENCE_REGEX,
 } from "../codeBlockOps";
@@ -117,6 +119,26 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
         const anchor = selection.anchor;
         const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
         if (!codeBlock) return false;
+
+        const openFence = codeBlock.getFirstChild();
+        if (
+          $isMarkdownCodeFenceNode(openFence) &&
+          $isCursorAtCodeBlockStart(anchor, codeBlock, openFence)
+        ) {
+          // Backspace at the very start of the code block. Lexical's default
+          // handler dissolves the block (merging it into the previous block).
+          // When the previous sibling is an empty paragraph, simply remove it
+          // so the structure is preserved. When the previous sibling has
+          // content, fall through so the user can still merge content above
+          // — the reassemble transform recovers the block on the next split.
+          const prev = codeBlock.getPreviousSibling();
+          if ($isParagraphNode(prev) && prev.getTextContentSize() === 0) {
+            prev.remove();
+            event?.preventDefault();
+            return true;
+          }
+          return false;
+        }
 
         if ($isCursorAtFirstContentLineStart(anchor, codeBlock)) {
           if ($mergeFirstContentLineIntoOpenFence(codeBlock)) {
