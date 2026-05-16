@@ -1,5 +1,6 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useArrowKeyExitBehavior } from "./hooks/useArrowKeyExitBehavior";
+import { useBackspaceKeyBehavior } from "./hooks/useBackspaceKeyBehavior";
 import { useEscapeKeyBehavior } from "./hooks/useEscapeKeyBehavior";
 import { useInsertParagraphBehavior } from "./hooks/useInsertParagraphBehavior";
 import { useReassembleCodeBlock } from "./hooks/useReassembleCodeBlock";
@@ -11,6 +12,7 @@ export default function MarkdownCodeBlockPlugin() {
   useInsertParagraphBehavior(editor);
   useEscapeKeyBehavior(editor);
   useArrowKeyExitBehavior(editor);
+  useBackspaceKeyBehavior(editor);
   useSelectionFocusTracking(editor);
   useReassembleCodeBlock(editor);
   useRemoveEmptyCodeBlock(editor);

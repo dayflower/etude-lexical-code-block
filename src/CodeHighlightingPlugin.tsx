@@ -11,6 +11,7 @@ import {
   $isTextNode,
   type LexicalEditor,
   type LexicalNode,
+  type TextNode,
 } from "lexical";
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
@@ -24,7 +25,10 @@ import "prismjs/components/prism-bash";
 import "prismjs/components/prism-python";
 import "prismjs/components/prism-markup";
 import { useEffect } from "react";
-import { MarkdownCodeBlockNode } from "./MarkdownCodeBlockNode";
+import {
+  $isMarkdownCodeFenceNode,
+  MarkdownCodeBlockNode,
+} from "./MarkdownCodeBlockNode";
 
 type FlatToken = { type: string | null; content: string };
 
@@ -71,11 +75,17 @@ function tokenize(code: string, grammar: Prism.Grammar): FlatToken[] {
 function expectedChildrenFromCodeText(
   codeText: string,
   grammar: Prism.Grammar | null,
+  trailingLineBreak: boolean,
 ): ExpectedChild[] {
   // Structure invariant: the middle of a code block always begins with a
   // separator linebreak (after openFence). For each line of code (including
   // the sole empty line of an otherwise empty block), we then emit zero or
   // more highlight tokens followed by a terminating linebreak.
+  //
+  // `trailingLineBreak` mirrors the current structure: when the close fence
+  // has been merged onto the last content line (caret moved up via Backspace
+  // at the close-fence-line start), the final LB is dropped so the rebuild
+  // does not silently re-canonicalize that transient state.
   const result: ExpectedChild[] = [{ kind: "linebreak" }];
 
   const flat: FlatToken[] =
@@ -109,6 +119,9 @@ function expectedChildrenFromCodeText(
     }
     result.push({ kind: "linebreak" });
   }
+  if (!trailingLineBreak && result.length > 0) {
+    result.pop();
+  }
   return result;
 }
 
@@ -132,11 +145,26 @@ function middleChildrenMatch(
   return true;
 }
 
+// Offset is expressed in the block's flat text-content space, summing the
+// sizes of every child (including the open/close fences). Capture and restore
+// stay symmetric as long as both sides walk the same children sequence.
 function getOffsetInBlock(
   block: MarkdownCodeBlockNode,
   node: LexicalNode,
   offset: number,
 ): number | null {
+  // Element-type selection on the block itself: offset is a child index.
+  // Lexical lands here after $insertLineBreak when the new LB's next sibling
+  // is not a text node (e.g. another LineBreakNode).
+  if (node.is(block)) {
+    const children = block.getChildren();
+    let pos = 0;
+    for (let i = 0; i < offset && i < children.length; i++) {
+      pos += children[i].getTextContentSize();
+    }
+    return pos;
+  }
+
   let cur: LexicalNode | null = node;
   while (cur && cur.getParent()?.getKey() !== block.getKey()) {
     cur = cur.getParent();
@@ -150,6 +178,17 @@ function getOffsetInBlock(
   return null;
 }
 
+// For LineBreak-boundary checks where the saved offset sits exactly between
+// two structural children: prefer landing on a content TextNode and fall back
+// to an element-type selection on the block when only a fence is adjacent.
+// Used only at boundaries — within a fence's text range we still want the
+// cursor to land on the fence itself.
+function $isUsableCursorText(
+  node: LexicalNode | null | undefined,
+): node is TextNode {
+  return !!node && $isTextNode(node) && !$isMarkdownCodeFenceNode(node);
+}
+
 function setOffsetInBlock(
   block: MarkdownCodeBlockNode,
   offset: number,
@@ -159,31 +198,45 @@ function setOffsetInBlock(
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
     const size = child.getTextContentSize();
+
+    // Boundary: cursor is exactly before this child.
+    if (remaining === 0 && $isLineBreakNode(child)) {
+      const prev = children[i - 1];
+      if ($isUsableCursorText(prev)) {
+        const prevSize = prev.getTextContentSize();
+        prev.select(prevSize, prevSize);
+        return true;
+      }
+      // Empty line (prev is another LB or the open fence): anchor element-type
+      // selection on the block at this child index.
+      block.select(i, i);
+      return true;
+    }
+
     if (remaining <= size) {
       if ($isTextNode(child)) {
+        // Inside a fence's text range is a legitimate cursor target too
+        // (e.g. between the ``` marker and the language label).
         child.select(remaining, remaining);
         return true;
       }
       if ($isLineBreakNode(child)) {
-        if (remaining === 0) {
-          const prev = children[i - 1];
-          if (prev && $isTextNode(prev)) {
-            const prevSize = prev.getTextContentSize();
-            prev.select(prevSize, prevSize);
-            return true;
-          }
-        }
+        // remaining must be size (=1): cursor is right after this LB.
         const next = children[i + 1];
-        if (next && $isTextNode(next)) {
+        if ($isUsableCursorText(next)) {
           next.select(0, 0);
           return true;
         }
+        // Next is another LB or close fence — empty line position.
+        block.select(i + 1, i + 1);
+        return true;
       }
     }
     remaining -= size;
   }
+
   const last = children[children.length - 1];
-  if (last && $isTextNode(last)) {
+  if ($isUsableCursorText(last)) {
     const size = last.getTextContentSize();
     last.select(size, size);
     return true;
@@ -198,7 +251,19 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const codeText = codeBlock.getCodeText();
   if (codeText === null) return;
 
-  const expected = expectedChildrenFromCodeText(codeText, grammar);
+  // Preserve the "close fence merged with last content line" transient state
+  // (see $mergeCloseFenceIntoLastContentLine). If the close fence's previous
+  // sibling is not an LB, the structure has no trailing LB and the rebuild
+  // must not invent one.
+  const closeFence = codeBlock.getLastChild();
+  const trailingLineBreak = closeFence
+    ? $isLineBreakNode(closeFence.getPreviousSibling())
+    : true;
+  const expected = expectedChildrenFromCodeText(
+    codeText,
+    grammar,
+    trailingLineBreak,
+  );
 
   const allChildren = codeBlock.getChildren();
   const middleChildren = allChildren.slice(1, -1);
@@ -212,7 +277,6 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   }
 
   for (const child of middleChildren) child.remove();
-  const closeFence = codeBlock.getLastChild();
   if (!closeFence) return;
   for (const item of expected) {
     const node =
