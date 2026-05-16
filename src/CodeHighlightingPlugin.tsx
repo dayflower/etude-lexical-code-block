@@ -11,7 +11,6 @@ import {
   $isTextNode,
   type LexicalEditor,
   type LexicalNode,
-  type TextNode,
 } from "lexical";
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
@@ -26,7 +25,7 @@ import "prismjs/components/prism-python";
 import "prismjs/components/prism-markup";
 import { useEffect } from "react";
 import {
-  $isMarkdownCodeFenceNode,
+  $isContentTextNode,
   MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
@@ -148,23 +147,29 @@ function middleChildrenMatch(
 // Offset is expressed in the block's flat text-content space, summing the
 // sizes of every child (including the open/close fences). Capture and restore
 // stay symmetric as long as both sides walk the same children sequence.
-function getOffsetInBlock(
+
+// Element-type anchor: `anchor.offset` is a child index. Lexical lands here
+// after $insertLineBreak when the new LB's next sibling is not a text node
+// (e.g. another LineBreakNode).
+function getOffsetForElementAnchor(
+  block: MarkdownCodeBlockNode,
+  childIndex: number,
+): number {
+  const children = block.getChildren();
+  let pos = 0;
+  for (let i = 0; i < childIndex && i < children.length; i++) {
+    pos += children[i].getTextContentSize();
+  }
+  return pos;
+}
+
+// Text-type anchor: walk up to the block's direct child, then sum sizes of
+// the children that precede it and add the in-child offset.
+function getOffsetForTextAnchor(
   block: MarkdownCodeBlockNode,
   node: LexicalNode,
   offset: number,
 ): number | null {
-  // Element-type selection on the block itself: offset is a child index.
-  // Lexical lands here after $insertLineBreak when the new LB's next sibling
-  // is not a text node (e.g. another LineBreakNode).
-  if (node.is(block)) {
-    const children = block.getChildren();
-    let pos = 0;
-    for (let i = 0; i < offset && i < children.length; i++) {
-      pos += children[i].getTextContentSize();
-    }
-    return pos;
-  }
-
   let cur: LexicalNode | null = node;
   while (cur && cur.getParent()?.getKey() !== block.getKey()) {
     cur = cur.getParent();
@@ -178,65 +183,99 @@ function getOffsetInBlock(
   return null;
 }
 
-// For LineBreak-boundary checks where the saved offset sits exactly between
-// two structural children: prefer landing on a content TextNode and fall back
-// to an element-type selection on the block when only a fence is adjacent.
-// Used only at boundaries — within a fence's text range we still want the
-// cursor to land on the fence itself.
-function $isUsableCursorText(
-  node: LexicalNode | null | undefined,
-): node is TextNode {
-  return !!node && $isTextNode(node) && !$isMarkdownCodeFenceNode(node);
+// A position between two adjacent children of the block (or at either end).
+// `before` / `after` may be null when the boundary sits at the very start or
+// end. `blockChildIndex` is the child index that an element-type fallback
+// would target (i.e. the index of `after`, or `children.length` at the tail).
+type CursorBoundary = {
+  before: LexicalNode | null;
+  after: LexicalNode | null;
+  blockChildIndex: number;
+};
+
+// Decide where the caret lands for a between-children boundary. Priority:
+//   1. Adjacent content TextNode (prev preferred over next) — natural target.
+//   2. Adjacent fence (TextNode but not content) — text-type selection at
+//      the fence edge mirrors the captured "approached from inside the
+//      fence" landing and keeps the selection kind stable across rebuilds.
+//   3. Element-type selection on the block (empty-line fallback).
+// Returning false signals a degenerate boundary with no children to anchor.
+function $resolveCursorAt(
+  block: MarkdownCodeBlockNode,
+  boundary: CursorBoundary,
+): boolean {
+  const { before, after, blockChildIndex } = boundary;
+  if ($isContentTextNode(before)) {
+    const size = before.getTextContentSize();
+    before.select(size, size);
+    return true;
+  }
+  if ($isContentTextNode(after)) {
+    after.select(0, 0);
+    return true;
+  }
+  if ($isTextNode(before)) {
+    const size = before.getTextContentSize();
+    before.select(size, size);
+    return true;
+  }
+  if ($isTextNode(after)) {
+    after.select(0, 0);
+    return true;
+  }
+  if (before === null && after === null) return false;
+  block.select(blockChildIndex, blockChildIndex);
+  return true;
 }
 
 function setOffsetInBlock(
   block: MarkdownCodeBlockNode,
-  offset: number,
+  targetOffset: number,
 ): boolean {
-  let remaining = offset;
   const children = block.getChildren();
+  let runningOffset = 0;
+
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
+
+    // Boundary just before this child (= just after children[i - 1]).
+    if (runningOffset === targetOffset) {
+      return $resolveCursorAt(block, {
+        before: i > 0 ? children[i - 1] : null,
+        after: child,
+        blockChildIndex: i,
+      });
+    }
+
     const size = child.getTextContentSize();
 
-    // Boundary: cursor is exactly before this child.
-    if (remaining === 0 && $isLineBreakNode(child)) {
-      const prev = children[i - 1];
-      if ($isUsableCursorText(prev)) {
-        const prevSize = prev.getTextContentSize();
-        prev.select(prevSize, prevSize);
-        return true;
-      }
-      // Empty line (prev is another LB or the open fence): anchor element-type
-      // selection on the block at this child index.
-      block.select(i, i);
+    // Strictly inside a TextNode child (not at either edge). Includes the
+    // "between ``` and the language label" position inside an open fence.
+    if (
+      targetOffset > runningOffset &&
+      targetOffset < runningOffset + size &&
+      $isTextNode(child)
+    ) {
+      const inChild = targetOffset - runningOffset;
+      child.select(inChild, inChild);
       return true;
     }
 
-    if (remaining <= size) {
-      if ($isTextNode(child)) {
-        // Inside a fence's text range is a legitimate cursor target too
-        // (e.g. between the ``` marker and the language label).
-        child.select(remaining, remaining);
-        return true;
-      }
-      if ($isLineBreakNode(child)) {
-        // remaining must be size (=1): cursor is right after this LB.
-        const next = children[i + 1];
-        if ($isUsableCursorText(next)) {
-          next.select(0, 0);
-          return true;
-        }
-        // Next is another LB or close fence — empty line position.
-        block.select(i + 1, i + 1);
-        return true;
-      }
-    }
-    remaining -= size;
+    runningOffset += size;
   }
 
+  // Boundary at the very end of the block.
+  if (runningOffset === targetOffset) {
+    return $resolveCursorAt(block, {
+      before: children[children.length - 1] ?? null,
+      after: null,
+      blockChildIndex: children.length,
+    });
+  }
+
+  // Target offset overshoots the block; clamp to end of last content text.
   const last = children[children.length - 1];
-  if ($isUsableCursorText(last)) {
+  if ($isContentTextNode(last)) {
     const size = last.getTextContentSize();
     last.select(size, size);
     return true;
@@ -251,14 +290,11 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const codeText = codeBlock.getCodeText();
   if (codeText === null) return;
 
-  // Preserve the "close fence merged with last content line" transient state
-  // (see $mergeCloseFenceIntoLastContentLine). If the close fence's previous
-  // sibling is not an LB, the structure has no trailing LB and the rebuild
-  // must not invent one.
+  // Preserve the "close fence merged with last content line" transient
+  // state (see $mergeCloseFenceIntoLastContentLine). The rebuild must not
+  // invent a trailing LB when the structure currently has none.
   const closeFence = codeBlock.getLastChild();
-  const trailingLineBreak = closeFence
-    ? $isLineBreakNode(closeFence.getPreviousSibling())
-    : true;
+  const trailingLineBreak = codeBlock.hasTrailingLineBreak();
   const expected = expectedChildrenFromCodeText(
     codeText,
     grammar,
@@ -273,7 +309,10 @@ function $highlightCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
   const selection = $getSelection();
   if ($isRangeSelection(selection) && selection.isCollapsed()) {
     const anchor = selection.anchor;
-    savedOffset = getOffsetInBlock(codeBlock, anchor.getNode(), anchor.offset);
+    const anchorNode = anchor.getNode();
+    savedOffset = anchorNode.is(codeBlock)
+      ? getOffsetForElementAnchor(codeBlock, anchor.offset)
+      : getOffsetForTextAnchor(codeBlock, anchorNode, anchor.offset);
   }
 
   for (const child of middleChildren) child.remove();

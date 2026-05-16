@@ -3,7 +3,6 @@
 
 .markdown-code-block {
   display: block;
-  background-color: #f3f4f6;
   border-radius: 0.25rem;
   padding: 0.75rem 1rem;
   margin-bottom: 0.5rem;
@@ -12,6 +11,38 @@
   line-height: 1.5;
   white-space: pre-wrap;
   overflow: auto;
+  position: relative;
+  isolation: isolate;
+}
+
+/* The block background lives on a pseudo-element so we can shrink the
+   painted area without changing the block's own box. */
+.markdown-code-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: #f3f4f6;
+  border-radius: inherit;
+  z-index: -1;
+}
+
+/* When fences are hidden (off mode + unfocused), inset the gray by one
+   fence line at top and bottom so it does not paint over the invisible
+   fence rows. 1.5em == line-height * font-size == one fence line. */
+.markdown-code-block:not(.is-focused)::before {
+  top: 0.75em;
+  bottom: 0.75em;
+  border-radius: inherit;
+}
+
+.always-show-fences .markdown-code-block:not(.is-focused)::before {
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+}
+
+.markdown-code-block.is-focused::before {
+  background-color: #eef2f7;
 }
 
 .markdown-code-fence {
@@ -26,8 +57,4 @@
 
 .always-show-fences .markdown-code-block:not(.is-focused) .markdown-code-fence {
   color: #94a3b8;
-}
-
-.markdown-code-block.is-focused {
-  background-color: #eef2f7;
 }
