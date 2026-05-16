@@ -10,10 +10,11 @@ import { useEffect } from "react";
 import {
   $exitCodeBlockAfter,
   $findNearestMarkdownCodeBlockNode,
+} from "../codeBlockOps";
+import {
   $isCursorAtCodeBlockEnd,
   $isCursorOnCloseFenceLine,
-} from "../codeBlockOps";
-import { $isMarkdownCodeFenceNode } from "../MarkdownCodeBlockNode";
+} from "../cursorPredicates";
 
 export function useArrowKeyExitBehavior(editor: LexicalEditor): void {
   useEffect(() => {
@@ -32,15 +33,10 @@ export function useArrowKeyExitBehavior(editor: LexicalEditor): void {
       if (!codeBlock) return false;
       if (codeBlock.getNextSibling() !== null) return false;
 
-      const closeFence = codeBlock.getLastChild();
-      if (!$isMarkdownCodeFenceNode(closeFence)) return false;
-
       if (requireEnd) {
-        if (!$isCursorAtCodeBlockEnd(anchor, codeBlock, closeFence))
-          return false;
+        if (!$isCursorAtCodeBlockEnd(anchor, codeBlock)) return false;
       } else {
-        if (!$isCursorOnCloseFenceLine(anchor, codeBlock, closeFence))
-          return false;
+        if (!$isCursorOnCloseFenceLine(anchor, codeBlock)) return false;
       }
 
       event?.preventDefault();

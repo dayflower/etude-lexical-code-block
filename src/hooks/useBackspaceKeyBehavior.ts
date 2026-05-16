@@ -11,11 +11,13 @@ import {
 import { useEffect } from "react";
 import {
   $findNearestMarkdownCodeBlockNode,
+  parseOpenFence,
+} from "../codeBlockOps";
+import {
   $isCursorAtCloseFenceLineStart,
   $isCursorAtCodeBlockStart,
   $isCursorAtFirstContentLineStart,
-  parseOpenFence,
-} from "../codeBlockOps";
+} from "../cursorPredicates";
 import {
   $isContentTextNode,
   $isMarkdownCodeFenceNode,
@@ -110,11 +112,7 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
         const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
         if (!codeBlock) return false;
 
-        const openFence = codeBlock.getFirstChild();
-        if (
-          $isMarkdownCodeFenceNode(openFence) &&
-          $isCursorAtCodeBlockStart(anchor, codeBlock, openFence)
-        ) {
+        if ($isCursorAtCodeBlockStart(anchor, codeBlock)) {
           // Backspace at the very start of the code block. Lexical's default
           // handler dissolves the block (merging it into the previous block).
           // When the previous sibling is an empty paragraph, simply remove it
@@ -138,11 +136,7 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
           return false;
         }
 
-        const closeFence = codeBlock.getLastChild();
-        if (
-          $isMarkdownCodeFenceNode(closeFence) &&
-          $isCursorAtCloseFenceLineStart(anchor, codeBlock, closeFence)
-        ) {
+        if ($isCursorAtCloseFenceLineStart(anchor, codeBlock)) {
           if ($mergeCloseFenceIntoLastContentLine(codeBlock)) {
             event?.preventDefault();
             return true;

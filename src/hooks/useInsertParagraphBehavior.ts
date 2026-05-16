@@ -12,14 +12,15 @@ import {
   $exitCodeBlockAfter,
   $exitCodeBlockBefore,
   $findNearestMarkdownCodeBlockNode,
-  $isCursorAtCodeBlockEnd,
-  $isCursorAtCodeBlockStart,
   parseOpenFence,
 } from "../codeBlockOps";
 import {
+  $isCursorAtCodeBlockEnd,
+  $isCursorAtCodeBlockStart,
+} from "../cursorPredicates";
+import {
   $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
-  $isMarkdownCodeFenceNode,
   $selectFirstContentLineStart,
 } from "../MarkdownCodeBlockNode";
 
@@ -37,21 +38,12 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
 
         const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
         if (codeBlock) {
-          const openFence = codeBlock.getFirstChild();
-          const closeFence = codeBlock.getLastChild();
-
-          if (
-            $isMarkdownCodeFenceNode(openFence) &&
-            $isCursorAtCodeBlockStart(anchor, codeBlock, openFence)
-          ) {
+          if ($isCursorAtCodeBlockStart(anchor, codeBlock)) {
             $exitCodeBlockBefore(codeBlock);
             return true;
           }
 
-          if (
-            $isMarkdownCodeFenceNode(closeFence) &&
-            $isCursorAtCodeBlockEnd(anchor, codeBlock, closeFence)
-          ) {
+          if ($isCursorAtCodeBlockEnd(anchor, codeBlock)) {
             $exitCodeBlockAfter(codeBlock);
             return true;
           }
