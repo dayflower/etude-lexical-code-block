@@ -3,7 +3,6 @@ import {
   $isLineBreakNode,
   $isParagraphNode,
   $isRangeSelection,
-  $isTextNode,
   COMMAND_PRIORITY_LOW,
   KEY_BACKSPACE_COMMAND,
   type LexicalEditor,
@@ -15,17 +14,14 @@ import {
   $isCursorAtCloseFenceLineStart,
   $isCursorAtCodeBlockStart,
   $isCursorAtFirstContentLineStart,
-  OPEN_FENCE_REGEX,
+  parseOpenFence,
 } from "../codeBlockOps";
 import {
+  $isContentTextNode,
   $isMarkdownCodeFenceNode,
   type MarkdownCodeBlockNode,
+  OPEN_FENCE_PREFIX_LENGTH,
 } from "../MarkdownCodeBlockNode";
-
-// Open fence text always starts with three backticks (see $appendCodeBlockChildren
-// and OPEN_FENCE_REGEX). Position the caret right after them so the user keeps
-// editing at the boundary between fence marker and language label.
-const OPEN_FENCE_MARKER_LENGTH = 3;
 
 function $mergeFirstContentLineIntoOpenFence(
   codeBlock: MarkdownCodeBlockNode,
@@ -42,14 +38,8 @@ function $mergeFirstContentLineIntoOpenFence(
   let mergedText = "";
   const toRemove: LexicalNode[] = [];
   let cursor: LexicalNode | null = separator.getNextSibling();
-  while (
-    cursor &&
-    !$isLineBreakNode(cursor) &&
-    !$isMarkdownCodeFenceNode(cursor)
-  ) {
-    if ($isTextNode(cursor)) {
-      mergedText += cursor.getTextContent();
-    }
+  while ($isContentTextNode(cursor)) {
+    mergedText += cursor.getTextContent();
     toRemove.push(cursor);
     cursor = cursor.getNextSibling();
   }
@@ -57,9 +47,9 @@ function $mergeFirstContentLineIntoOpenFence(
   if (mergedText.length > 0) {
     const newFenceText = openFence.getTextContent() + mergedText;
     openFence.setTextContent(newFenceText);
-    const match = OPEN_FENCE_REGEX.exec(newFenceText);
-    if (match) {
-      codeBlock.setLanguage(match[1] ?? "");
+    const parsed = parseOpenFence(newFenceText);
+    if (parsed) {
+      codeBlock.setLanguage(parsed.language);
     }
   }
   for (const node of toRemove) {
@@ -67,7 +57,7 @@ function $mergeFirstContentLineIntoOpenFence(
   }
   separator.remove();
 
-  openFence.select(OPEN_FENCE_MARKER_LENGTH, OPEN_FENCE_MARKER_LENGTH);
+  openFence.select(OPEN_FENCE_PREFIX_LENGTH, OPEN_FENCE_PREFIX_LENGTH);
   return true;
 }
 
@@ -90,7 +80,7 @@ function $mergeCloseFenceIntoLastContentLine(
   const before = lastLB.getPreviousSibling();
   if (!before) return false;
 
-  if ($isTextNode(before) && !$isMarkdownCodeFenceNode(before)) {
+  if ($isContentTextNode(before)) {
     // Last line carries content: drop the LB and park the caret at the join
     // point (end of the content, immediately before the close fence text).
     const size = before.getTextContentSize();

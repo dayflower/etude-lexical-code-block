@@ -138,6 +138,31 @@ export function $isMarkdownCodeBlockNode(
   return node instanceof MarkdownCodeBlockNode;
 }
 
+// Length of the "```" prefix that every fence row carries.
+export const OPEN_FENCE_PREFIX_LENGTH = 3;
+
+// Canonical child layout is [openFence, separatorLB, firstContent, ...]; the
+// first content line sits at child index 2.
+export const FIRST_CONTENT_LINE_CHILD_INDEX = 2;
+
+// "TextNode but not a fence" — i.e. a regular content text node inside the
+// middle of a code block (highlight tokens, raw inserts, etc.).
+export function $isContentTextNode(
+  node: LexicalNode | null | undefined,
+): node is TextNode {
+  return $isTextNode(node) && !$isMarkdownCodeFenceNode(node);
+}
+
+// Anchor an element-type selection at the start of the first content line.
+export function $selectFirstContentLineStart(
+  codeBlock: MarkdownCodeBlockNode,
+): void {
+  codeBlock.select(
+    FIRST_CONTENT_LINE_CHILD_INDEX,
+    FIRST_CONTENT_LINE_CHILD_INDEX,
+  );
+}
+
 const LANGUAGE_CLASS_REGEX = /^language-(.+)$/;
 
 function detectLanguage(pre: HTMLElement): string {

@@ -11,7 +11,6 @@ import {
   $isTextNode,
   type LexicalEditor,
   type LexicalNode,
-  type TextNode,
 } from "lexical";
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
@@ -26,7 +25,7 @@ import "prismjs/components/prism-python";
 import "prismjs/components/prism-markup";
 import { useEffect } from "react";
 import {
-  $isMarkdownCodeFenceNode,
+  $isContentTextNode,
   MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
@@ -178,17 +177,6 @@ function getOffsetInBlock(
   return null;
 }
 
-// For LineBreak-boundary checks where the saved offset sits exactly between
-// two structural children: prefer landing on a content TextNode and fall back
-// to an element-type selection on the block when only a fence is adjacent.
-// Used only at boundaries — within a fence's text range we still want the
-// cursor to land on the fence itself.
-function $isUsableCursorText(
-  node: LexicalNode | null | undefined,
-): node is TextNode {
-  return !!node && $isTextNode(node) && !$isMarkdownCodeFenceNode(node);
-}
-
 function setOffsetInBlock(
   block: MarkdownCodeBlockNode,
   offset: number,
@@ -199,10 +187,13 @@ function setOffsetInBlock(
     const child = children[i];
     const size = child.getTextContentSize();
 
-    // Boundary: cursor is exactly before this child.
+    // Boundary: cursor is exactly before this child. Prefer landing on a
+    // content TextNode and fall back to element-type selection on the block
+    // when only a fence is adjacent — within a fence's text range we still
+    // want the cursor to land on the fence itself.
     if (remaining === 0 && $isLineBreakNode(child)) {
       const prev = children[i - 1];
-      if ($isUsableCursorText(prev)) {
+      if ($isContentTextNode(prev)) {
         const prevSize = prev.getTextContentSize();
         prev.select(prevSize, prevSize);
         return true;
@@ -223,7 +214,7 @@ function setOffsetInBlock(
       if ($isLineBreakNode(child)) {
         // remaining must be size (=1): cursor is right after this LB.
         const next = children[i + 1];
-        if ($isUsableCursorText(next)) {
+        if ($isContentTextNode(next)) {
           next.select(0, 0);
           return true;
         }
@@ -236,7 +227,7 @@ function setOffsetInBlock(
   }
 
   const last = children[children.length - 1];
-  if ($isUsableCursorText(last)) {
+  if ($isContentTextNode(last)) {
     const size = last.getTextContentSize();
     last.select(size, size);
     return true;

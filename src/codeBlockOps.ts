@@ -3,17 +3,29 @@ import {
   $createTextNode,
   $isLineBreakNode,
   type LexicalNode,
+  type ParagraphNode,
   type PointType,
 } from "lexical";
 import {
   $appendCodeBlockChildren,
   $isMarkdownCodeBlockNode,
   $isMarkdownCodeFenceNode,
+  FIRST_CONTENT_LINE_CHILD_INDEX,
   type MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
-export const OPEN_FENCE_REGEX = /^```([a-zA-Z0-9_+-]*)\s*$/;
-export const CLOSE_FENCE_REGEX = /^```\s*$/;
+const OPEN_FENCE_REGEX = /^```([a-zA-Z0-9_+-]*)\s*$/;
+const CLOSE_FENCE_REGEX = /^```\s*$/;
+
+export function parseOpenFence(text: string): { language: string } | null {
+  const match = OPEN_FENCE_REGEX.exec(text);
+  if (!match) return null;
+  return { language: match[1] ?? "" };
+}
+
+export function isCloseFence(text: string): boolean {
+  return CLOSE_FENCE_REGEX.test(text);
+}
 
 export function $findNearestMarkdownCodeBlockNode(
   node: LexicalNode | null,
@@ -34,14 +46,14 @@ export function $extractValidCodeBlockInfo(
   if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
     return null;
   }
-  const openMatch = OPEN_FENCE_REGEX.exec(first.getTextContent());
-  if (!openMatch) return null;
-  if (!CLOSE_FENCE_REGEX.test(last.getTextContent())) return null;
+  const parsedOpen = parseOpenFence(first.getTextContent());
+  if (!parsedOpen) return null;
+  if (!isCloseFence(last.getTextContent())) return null;
   // The close fence must sit on its own line. The "merged" transient state
   // (no LB between last content and close fence) is allowed while focused but
   // is not a persistable layout — let the caller unwrap it on blur.
   if (!$isLineBreakNode(last.getPreviousSibling())) return null;
-  return { language: openMatch[1] ?? "" };
+  return { language: parsedOpen.language };
 }
 
 export function $normalizeCodeBlock(
@@ -62,12 +74,16 @@ export function $normalizeCodeBlock(
   }
 }
 
-export function $unwrapMarkdownCodeBlockNode(
-  codeBlock: MarkdownCodeBlockNode,
-): void {
-  const text = codeBlock.getTextContent();
+// Replace `node` with one paragraph per "\n"-separated line of `text`. Empty
+// lines become empty paragraphs; non-empty lines get a single TextNode child.
+// Returns the newly inserted paragraphs in document order.
+export function $replaceWithParagraphsPerLine(
+  node: LexicalNode,
+  text: string,
+): ParagraphNode[] {
   const lines = text.split("\n");
-  let prev: LexicalNode = codeBlock;
+  const created: ParagraphNode[] = [];
+  let prev: LexicalNode = node;
   for (const line of lines) {
     const paragraph = $createParagraphNode();
     if (line.length > 0) {
@@ -75,8 +91,16 @@ export function $unwrapMarkdownCodeBlockNode(
     }
     prev.insertAfter(paragraph);
     prev = paragraph;
+    created.push(paragraph);
   }
-  codeBlock.remove();
+  node.remove();
+  return created;
+}
+
+export function $unwrapMarkdownCodeBlockNode(
+  codeBlock: MarkdownCodeBlockNode,
+): void {
+  $replaceWithParagraphsPerLine(codeBlock, codeBlock.getTextContent());
 }
 
 export function $exitCodeBlockBefore(codeBlock: MarkdownCodeBlockNode): void {
@@ -128,11 +152,13 @@ export function $isCursorAtFirstContentLineStart(
   const anchorNode = anchor.getNode();
 
   if (anchorNode.is(codeBlock)) {
-    return anchor.offset === 2;
+    return anchor.offset === FIRST_CONTENT_LINE_CHILD_INDEX;
   }
 
   if (anchor.offset !== 0) return false;
-  const firstContent = codeBlock.getChildAtIndex(2);
+  const firstContent = codeBlock.getChildAtIndex(
+    FIRST_CONTENT_LINE_CHILD_INDEX,
+  );
   return firstContent !== null && anchorNode.is(firstContent);
 }
 

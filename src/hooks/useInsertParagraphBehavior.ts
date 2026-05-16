@@ -14,12 +14,13 @@ import {
   $findNearestMarkdownCodeBlockNode,
   $isCursorAtCodeBlockEnd,
   $isCursorAtCodeBlockStart,
-  OPEN_FENCE_REGEX,
+  parseOpenFence,
 } from "../codeBlockOps";
 import {
   $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
   $isMarkdownCodeFenceNode,
+  $selectFirstContentLineStart,
 } from "../MarkdownCodeBlockNode";
 
 export function useInsertParagraphBehavior(editor: LexicalEditor): void {
@@ -64,11 +65,10 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
         if (!$isParagraphNode(parent)) return false;
         if (anchor.offset !== anchorNode.getTextContentSize()) return false;
 
-        const text = parent.getTextContent();
-        const match = OPEN_FENCE_REGEX.exec(text);
-        if (!match) return false;
+        const parsed = parseOpenFence(parent.getTextContent());
+        if (!parsed) return false;
 
-        const language = match[1] ?? "";
+        const language = parsed.language;
         const codeBlockNode = $createMarkdownCodeBlockNode(language);
         $appendCodeBlockChildren(
           codeBlockNode,
@@ -77,7 +77,7 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
           "```",
         );
         parent.replace(codeBlockNode);
-        codeBlockNode.select(2, 2);
+        $selectFirstContentLineStart(codeBlockNode);
         return true;
       },
       COMMAND_PRIORITY_LOW,

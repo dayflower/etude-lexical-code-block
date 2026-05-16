@@ -1,6 +1,4 @@
 import {
-  $createParagraphNode,
-  $createTextNode,
   $isLineBreakNode,
   $isParagraphNode,
   type LexicalEditor,
@@ -9,7 +7,7 @@ import {
   TextNode,
 } from "lexical";
 import { useEffect } from "react";
-import { OPEN_FENCE_REGEX } from "../codeBlockOps";
+import { $replaceWithParagraphsPerLine, parseOpenFence } from "../codeBlockOps";
 import {
   $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
@@ -42,17 +40,21 @@ function $buildCodeBlockFromParagraphs(
 }
 
 function $tryReassembleAsCloseFence(paragraph: ParagraphNode): boolean {
-  if (!OPEN_FENCE_REGEX.test(paragraph.getTextContent())) return false;
+  if (parseOpenFence(paragraph.getTextContent()) === null) return false;
 
   const middles: ParagraphNode[] = [];
   let cursor: LexicalNode | null = paragraph.getPreviousSibling();
   while (cursor) {
     if (!$isParagraphNode(cursor)) return false;
-    const match = OPEN_FENCE_REGEX.exec(cursor.getTextContent());
-    if (match) {
-      const language = match[1] ?? "";
+    const parsed = parseOpenFence(cursor.getTextContent());
+    if (parsed) {
       middles.reverse();
-      $buildCodeBlockFromParagraphs(cursor, middles, paragraph, language);
+      $buildCodeBlockFromParagraphs(
+        cursor,
+        middles,
+        paragraph,
+        parsed.language,
+      );
       return true;
     }
     middles.push(cursor);
@@ -62,15 +64,15 @@ function $tryReassembleAsCloseFence(paragraph: ParagraphNode): boolean {
 }
 
 function $tryReassembleAsOpenFence(paragraph: ParagraphNode): boolean {
-  const match = OPEN_FENCE_REGEX.exec(paragraph.getTextContent());
-  if (!match) return false;
-  const language = match[1] ?? "";
+  const parsed = parseOpenFence(paragraph.getTextContent());
+  if (!parsed) return false;
+  const language = parsed.language;
 
   const middles: ParagraphNode[] = [];
   let cursor: LexicalNode | null = paragraph.getNextSibling();
   while (cursor) {
     if (!$isParagraphNode(cursor)) return false;
-    if (OPEN_FENCE_REGEX.test(cursor.getTextContent())) {
+    if (parseOpenFence(cursor.getTextContent()) !== null) {
       $buildCodeBlockFromParagraphs(paragraph, middles, cursor, language);
       return true;
     }
@@ -88,22 +90,8 @@ function $splitParagraphAtLineBreaks(
   paragraph: ParagraphNode,
 ): ParagraphNode[] {
   const text = paragraph.getTextContent();
-  const lines = text.split("\n");
-  if (lines.length <= 1) return [paragraph];
-
-  const created: ParagraphNode[] = [];
-  let prev: LexicalNode = paragraph;
-  for (const line of lines) {
-    const newPara = $createParagraphNode();
-    if (line.length > 0) {
-      newPara.append($createTextNode(line));
-    }
-    prev.insertAfter(newPara);
-    prev = newPara;
-    created.push(newPara);
-  }
-  paragraph.remove();
-  return created;
+  if (text.indexOf("\n") < 0) return [paragraph];
+  return $replaceWithParagraphsPerLine(paragraph, text);
 }
 
 function $hasInternalLineBreak(paragraph: ParagraphNode): boolean {
@@ -123,7 +111,7 @@ export function useReassembleCodeBlock(editor: LexicalEditor): void {
       // fence-pair scan below can pick it up.
       if ($hasInternalLineBreak(paragraph)) {
         const firstLine = paragraph.getTextContent().split("\n", 1)[0];
-        if (OPEN_FENCE_REGEX.test(firstLine)) {
+        if (parseOpenFence(firstLine) !== null) {
           const split = $splitParagraphAtLineBreaks(paragraph);
           const first = split[0];
           if (first) {
