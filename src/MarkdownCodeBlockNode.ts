@@ -130,7 +130,9 @@ export class MarkdownCodeBlockNode extends ElementNode {
   // True when the structure has a terminating linebreak between the last
   // content node and the close fence (canonical layout). False under the
   // transient "close fence merged onto the last content line" state created
-  // by close-fence-line-start Backspace.
+  // by close-fence-line-start Backspace — including the empty-content variant
+  // [openFence, LB, closeFence] where the single LB is shared as the
+  // separator with no separate trailing LB.
   //
   // Returns true when the close fence is missing (degenerate structure):
   // callers that depend on the close fence's existence guard separately, and
@@ -138,7 +140,12 @@ export class MarkdownCodeBlockNode extends ElementNode {
   hasTrailingLineBreak(): boolean {
     const last = this.getLastChild();
     if (!$isMarkdownCodeFenceNode(last)) return true;
-    return $isLineBreakNode(last.getPreviousSibling());
+    const prevOfLast = last.getPreviousSibling();
+    if (!$isLineBreakNode(prevOfLast)) return false;
+    // In [openFence, LB, closeFence] the only LB serves as the separator;
+    // there is no separate trailing LB. Treat this as the merged-on-empty
+    // transient state so CodeHighlightingPlugin preserves the layout.
+    return !prevOfLast.getPreviousSibling()?.is(this.getFirstChild());
   }
 }
 

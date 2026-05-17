@@ -65,11 +65,20 @@ function $mergeFirstContentLineIntoOpenFence(
 
 // Caret sits at the start of the close-fence line (just after the last LB).
 // Backspace at the start of a line normally joins it with the previous one;
-// applied here that means removing the LB so the close fence sits on the same
-// visual line as the last content. Lexical's default does delete the LB, but
-// the resulting "no LB before closeFence" layout then trips up
-// CodeHighlightingPlugin's rebuild (see expectedChildrenFromCodeText) — so we
-// handle it ourselves and leave the structure intact for the plugin to keep.
+// applied here, drop the trailing LB so the close fence moves up onto the
+// line above. We can't fall through to Lexical's default LB-delete because
+// the resulting "no LB before closeFence" layout trips up
+// CodeHighlightingPlugin's rebuild (see expectedChildrenFromCodeText), so we
+// handle it ourselves and rely on `hasTrailingLineBreak()` to signal the
+// transient layout to the rebuilder.
+//
+// Cursor placement depends on what sits on the line above:
+//   - Content text — caret at the join point (end of the content).
+//   - Empty content line (another LB above) — caret at the close-fence start.
+//
+// When the only thing above is the open fence (degenerate [openFence, LB,
+// closeFence] reached only by typing into the merged-on-empty state), there
+// is no further line to merge onto. Slide the caret up instead.
 function $mergeCloseFenceIntoLastContentLine(
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
@@ -83,17 +92,18 @@ function $mergeCloseFenceIntoLastContentLine(
   if (!before) return false;
 
   if ($isContentTextNode(before)) {
-    // Last line carries content: drop the LB and park the caret at the join
-    // point (end of the content, immediately before the close fence text).
     const size = before.getTextContentSize();
     lastLB.remove();
     before.select(size, size);
     return true;
   }
 
-  // Empty trailing line (prev is another LB) or no content (prev is the open
-  // fence). Don't collapse further — just slide the caret up onto the empty
-  // line above so a second Backspace can clean it up via Lexical's default.
+  if ($isLineBreakNode(before)) {
+    lastLB.remove();
+    closeFence.select(0, 0);
+    return true;
+  }
+
   const index = lastLB.getIndexWithinParent();
   codeBlock.select(index, index);
   return true;

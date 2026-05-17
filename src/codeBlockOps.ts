@@ -46,10 +46,13 @@ export function $extractValidCodeBlockInfo(
   const parsedOpen = parseOpenFence(first.getTextContent());
   if (!parsedOpen) return null;
   if (!isCloseFence(last.getTextContent())) return null;
-  // The close fence must sit on its own line. The "merged" transient state
-  // (no LB between last content and close fence) is allowed while focused but
-  // is not a persistable layout — let the caller unwrap it on blur.
-  if (!codeBlock.hasTrailingLineBreak()) return null;
+  // The "merged" transient states (close fence on the last content line, or
+  // close fence sharing the only separator LB with no trailing LB) are not
+  // persistable layouts but the block itself is still valid. We let
+  // `$normalizeCodeBlock` rebuild them to canonical on blur rather than
+  // unwrapping — unwrap would split the fences into separate paragraphs the
+  // reassembly transform cannot re-pair (e.g. "abc```" is not a close fence),
+  // trapping the cursor back inside a re-created block on blur.
   return { language: parsedOpen.language };
 }
 
