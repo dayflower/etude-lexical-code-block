@@ -75,8 +75,7 @@ function $dissolveCodeBlockMergingIntoPrev(
   codeBlock: MarkdownCodeBlockNode,
   prev: ParagraphNode,
 ): void {
-  const text = codeBlock.getTextContent();
-  const paragraphs = $replaceWithParagraphsPerLine(codeBlock, text);
+  const paragraphs = $replaceWithParagraphsPerLine(codeBlock);
   const first = paragraphs[0];
   if (!first) return;
 

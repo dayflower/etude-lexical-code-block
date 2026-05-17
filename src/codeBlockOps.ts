@@ -96,9 +96,9 @@ export function $normalizeCodeBlock(
 // Returns the newly inserted paragraphs in document order.
 export function $replaceWithParagraphsPerLine(
   node: LexicalNode,
-  text: string,
+  text?: string,
 ): ParagraphNode[] {
-  const lines = text.split("\n");
+  const lines = (text ?? node.getTextContent()).split("\n");
   const created: ParagraphNode[] = [];
   let prev: LexicalNode = node;
   for (const line of lines) {
@@ -117,7 +117,7 @@ export function $replaceWithParagraphsPerLine(
 export function $unwrapMarkdownCodeBlockNode(
   codeBlock: MarkdownCodeBlockNode,
 ): void {
-  $replaceWithParagraphsPerLine(codeBlock, codeBlock.getTextContent());
+  $replaceWithParagraphsPerLine(codeBlock);
 }
 
 export function $exitCodeBlockBefore(codeBlock: MarkdownCodeBlockNode): void {
