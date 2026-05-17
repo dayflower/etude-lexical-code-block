@@ -3,14 +3,17 @@ import {
   $isLineBreakNode,
   $isParagraphNode,
   $isRangeSelection,
+  $isTextNode,
   COMMAND_PRIORITY_LOW,
   KEY_BACKSPACE_COMMAND,
   type LexicalEditor,
   type LexicalNode,
+  type ParagraphNode,
 } from "lexical";
 import { useEffect } from "react";
 import {
   $findNearestMarkdownCodeBlockNode,
+  $replaceWithParagraphsPerLine,
   parseOpenFence,
 } from "../codeBlockOps";
 import {
@@ -61,6 +64,37 @@ function $mergeFirstContentLineIntoOpenFence(
 
   openFence.select(OPEN_FENCE_PREFIX_LENGTH, OPEN_FENCE_PREFIX_LENGTH);
   return true;
+}
+
+// Backspace at the very start of a code block whose previous sibling is a
+// non-empty paragraph. Lexical's default Backspace would merge the block's
+// existing children (MarkdownCodeFenceNode / CodeHighlightNode) into that
+// paragraph, leaving their CSS classes (`.markdown-code-fence`, `.token *`)
+// behind even though the text is no longer in a code context. Instead, we
+// unwrap the block into plain ParagraphNode/TextNode rows via
+// `$replaceWithParagraphsPerLine`, then move the first row's children into
+// `prev` so the merge happens through freshly created plain TextNodes only.
+function $dissolveCodeBlockMergingIntoPrev(
+  codeBlock: MarkdownCodeBlockNode,
+  prev: ParagraphNode,
+): void {
+  const text = codeBlock.getTextContent();
+  const paragraphs = $replaceWithParagraphsPerLine(codeBlock, text);
+  const first = paragraphs[0];
+  if (!first) return;
+
+  const movedChildren = [...first.getChildren()];
+  for (const child of movedChildren) {
+    prev.append(child);
+  }
+  first.remove();
+
+  const firstMoved = movedChildren[0];
+  if (firstMoved !== undefined && $isTextNode(firstMoved)) {
+    firstMoved.select(0, 0);
+    return;
+  }
+  prev.select(prev.getChildrenSize(), prev.getChildrenSize());
 }
 
 // Caret sits at the start of the close-fence line (just after the last LB).
@@ -124,14 +158,22 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
 
         if ($isCursorAtCodeBlockStart(anchor, codeBlock)) {
           // Backspace at the very start of the code block. Lexical's default
-          // handler dissolves the block (merging it into the previous block).
-          // When the previous sibling is an empty paragraph, simply remove it
-          // so the structure is preserved. When the previous sibling has
-          // content, fall through so the user can still merge content above
-          // — the reassemble transform recovers the block on the next split.
+          // handler dissolves the block (merging its children into the
+          // previous block). When the previous sibling is an empty paragraph,
+          // simply remove it so the structure is preserved. When the previous
+          // sibling is a non-empty paragraph, we cannot fall through —
+          // Lexical's default would move the existing
+          // MarkdownCodeFenceNode / CodeHighlightNode children into the
+          // paragraph and their syntax-coloring CSS classes would leak out.
+          // Handle the dissolution ourselves through plain TextNodes.
           const prev = codeBlock.getPreviousSibling();
           if ($isParagraphNode(prev) && prev.getTextContentSize() === 0) {
             prev.remove();
+            event?.preventDefault();
+            return true;
+          }
+          if ($isParagraphNode(prev)) {
+            $dissolveCodeBlockMergingIntoPrev(codeBlock, prev);
             event?.preventDefault();
             return true;
           }
