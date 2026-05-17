@@ -1,8 +1,11 @@
 import {
   $createParagraphNode,
   $createTextNode,
+  $getSelection,
+  $isRangeSelection,
   type LexicalNode,
   type ParagraphNode,
+  type PointType,
 } from "lexical";
 import {
   $appendCodeBlockChildren,
@@ -32,6 +35,18 @@ export function $findNearestMarkdownCodeBlockNode(
     current = current.getParent();
   }
   return null;
+}
+
+export function $getCollapsedCaretInCodeBlock(): {
+  anchor: PointType;
+  codeBlock: MarkdownCodeBlockNode;
+} | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+  const anchor = selection.anchor;
+  const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
+  if (!codeBlock) return null;
+  return { anchor, codeBlock };
 }
 
 export function $extractValidCodeBlockInfo(

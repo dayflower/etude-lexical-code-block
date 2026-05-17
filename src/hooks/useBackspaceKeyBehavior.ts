@@ -1,8 +1,6 @@
 import {
-  $getSelection,
   $isLineBreakNode,
   $isParagraphNode,
-  $isRangeSelection,
   $isTextNode,
   COMMAND_PRIORITY_LOW,
   KEY_BACKSPACE_COMMAND,
@@ -12,7 +10,7 @@ import {
 } from "lexical";
 import { useEffect } from "react";
 import {
-  $findNearestMarkdownCodeBlockNode,
+  $getCollapsedCaretInCodeBlock,
   $replaceWithParagraphsPerLine,
   parseOpenFence,
 } from "../codeBlockOps";
@@ -147,13 +145,9 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
     const remove = editor.registerCommand(
       KEY_BACKSPACE_COMMAND,
       (event: KeyboardEvent | null) => {
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection) || !selection.isCollapsed())
-          return false;
-
-        const anchor = selection.anchor;
-        const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
-        if (!codeBlock) return false;
+        const ctx = $getCollapsedCaretInCodeBlock();
+        if (!ctx) return false;
+        const { anchor, codeBlock } = ctx;
 
         if ($isCursorAtCodeBlockStart(anchor, codeBlock)) {
           // Backspace at the very start of the code block. Lexical's default
