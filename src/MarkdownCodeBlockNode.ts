@@ -165,6 +165,14 @@ export function $createMarkdownCodeBlockNode(
   return new MarkdownCodeBlockNode(language);
 }
 
+export function $createEmptyMarkdownCodeBlockNode(
+  language: string,
+): MarkdownCodeBlockNode {
+  const block = $createMarkdownCodeBlockNode(language);
+  $appendCodeBlockChildren(block, `\`\`\`${language}`, [""], "```");
+  return block;
+}
+
 export function $isMarkdownCodeBlockNode(
   node: LexicalNode | null | undefined,
 ): node is MarkdownCodeBlockNode {

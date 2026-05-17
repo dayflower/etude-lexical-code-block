@@ -19,8 +19,7 @@ import {
   $isCursorAtCodeBlockStart,
 } from "../cursorPredicates";
 import {
-  $appendCodeBlockChildren,
-  $createMarkdownCodeBlockNode,
+  $createEmptyMarkdownCodeBlockNode,
   $selectFirstContentLineStart,
 } from "../MarkdownCodeBlockNode";
 
@@ -64,13 +63,7 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
         if (!parsed) return false;
 
         const language = parsed.language;
-        const codeBlockNode = $createMarkdownCodeBlockNode(language);
-        $appendCodeBlockChildren(
-          codeBlockNode,
-          `\`\`\`${language}`,
-          [""],
-          "```",
-        );
+        const codeBlockNode = $createEmptyMarkdownCodeBlockNode(language);
         parent.replace(codeBlockNode);
         $selectFirstContentLineStart(codeBlockNode);
         return true;
