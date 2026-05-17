@@ -15,7 +15,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check": "biome check",
-    "fix": "biome check --write"
+    "fix": "biome check --write",
+    "test:e2e": "node --test e2e/verification.test.mjs"
   },
   "dependencies": {
     "@lexical/code-core": "^0.43.0",
