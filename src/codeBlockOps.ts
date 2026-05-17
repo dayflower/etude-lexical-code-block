@@ -2,6 +2,7 @@ import {
   $createParagraphNode,
   $createTextNode,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
   type LexicalNode,
   type ParagraphNode,
@@ -130,4 +131,13 @@ export function $exitCodeBlockAfter(codeBlock: MarkdownCodeBlockNode): void {
   const paragraph = $createParagraphNode();
   codeBlock.insertAfter(paragraph);
   paragraph.select();
+}
+
+export function $jumpAfterCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
+  const next = codeBlock.getNextSibling();
+  if ($isElementNode(next)) {
+    next.selectStart();
+    return;
+  }
+  $exitCodeBlockAfter(codeBlock);
 }

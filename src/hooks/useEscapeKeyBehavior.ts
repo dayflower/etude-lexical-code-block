@@ -1,12 +1,13 @@
 import {
-  $createParagraphNode,
-  $isElementNode,
   COMMAND_PRIORITY_HIGH,
   KEY_ESCAPE_COMMAND,
   type LexicalEditor,
 } from "lexical";
 import { useEffect } from "react";
-import { $getCollapsedCaretInCodeBlock } from "../codeBlockOps";
+import {
+  $getCollapsedCaretInCodeBlock,
+  $jumpAfterCodeBlock,
+} from "../codeBlockOps";
 
 export function useEscapeKeyBehavior(editor: LexicalEditor): void {
   useEffect(() => {
@@ -18,15 +19,7 @@ export function useEscapeKeyBehavior(editor: LexicalEditor): void {
         const { codeBlock } = ctx;
 
         event?.preventDefault();
-
-        const next = codeBlock.getNextSibling();
-        if ($isElementNode(next)) {
-          next.selectStart();
-        } else {
-          const paragraph = $createParagraphNode();
-          codeBlock.insertAfter(paragraph);
-          paragraph.select();
-        }
+        $jumpAfterCodeBlock(codeBlock);
         return true;
       },
       COMMAND_PRIORITY_HIGH,
