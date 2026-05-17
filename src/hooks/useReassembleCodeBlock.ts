@@ -7,7 +7,11 @@ import {
   TextNode,
 } from "lexical";
 import { useEffect } from "react";
-import { $replaceWithParagraphsPerLine, parseOpenFence } from "../codeBlockOps";
+import {
+  $replaceWithParagraphsPerLine,
+  isCloseFence,
+  parseOpenFence,
+} from "../codeBlockOps";
 import {
   $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
@@ -40,7 +44,7 @@ function $buildCodeBlockFromParagraphs(
 }
 
 function $tryReassembleAsCloseFence(paragraph: ParagraphNode): boolean {
-  if (parseOpenFence(paragraph.getTextContent()) === null) return false;
+  if (!isCloseFence(paragraph.getTextContent())) return false;
 
   const middles: ParagraphNode[] = [];
   let cursor: LexicalNode | null = paragraph.getPreviousSibling();
@@ -72,7 +76,7 @@ function $tryReassembleAsOpenFence(paragraph: ParagraphNode): boolean {
   let cursor: LexicalNode | null = paragraph.getNextSibling();
   while (cursor) {
     if (!$isParagraphNode(cursor)) return false;
-    if (parseOpenFence(cursor.getTextContent()) !== null) {
+    if (isCloseFence(cursor.getTextContent())) {
       $buildCodeBlockFromParagraphs(paragraph, middles, cursor, language);
       return true;
     }
