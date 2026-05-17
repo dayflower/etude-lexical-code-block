@@ -84,6 +84,16 @@ export class MarkdownCodeBlockNode extends ElementNode {
     return this.getLatest().__language;
   }
 
+  getOpenFence(): MarkdownCodeFenceNode | null {
+    const first = this.getFirstChild();
+    return $isMarkdownCodeFenceNode(first) ? first : null;
+  }
+
+  getCloseFence(): MarkdownCodeFenceNode | null {
+    const last = this.getLastChild();
+    return $isMarkdownCodeFenceNode(last) ? last : null;
+  }
+
   // Returns the middle content (between the fences) joined with "\n". The
   // first linebreak after the open fence is the structural separator and is
   // excluded. Returns null when the surrounding fences are missing.
@@ -138,14 +148,14 @@ export class MarkdownCodeBlockNode extends ElementNode {
   // callers that depend on the close fence's existence guard separately, and
   // the "no transient state" default keeps rebuilders from inventing layout.
   hasTrailingLineBreak(): boolean {
-    const last = this.getLastChild();
-    if (!$isMarkdownCodeFenceNode(last)) return true;
+    const last = this.getCloseFence();
+    if (!last) return true;
     const prevOfLast = last.getPreviousSibling();
     if (!$isLineBreakNode(prevOfLast)) return false;
     // In [openFence, LB, closeFence] the only LB serves as the separator;
     // there is no separate trailing LB. Treat this as the merged-on-empty
     // transient state so CodeHighlightingPlugin preserves the layout.
-    return !prevOfLast.getPreviousSibling()?.is(this.getFirstChild());
+    return !prevOfLast.getPreviousSibling()?.is(this.getOpenFence());
   }
 }
 

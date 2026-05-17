@@ -15,7 +15,6 @@ import {
 import {
   $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
-  $isMarkdownCodeFenceNode,
 } from "../MarkdownCodeBlockNode";
 
 function $buildCodeBlockFromParagraphs(
@@ -37,8 +36,8 @@ function $buildCodeBlockFromParagraphs(
   for (const mid of middleParagraphs) mid.remove();
   closeParagraph.remove();
 
-  const closeFenceNode = codeBlock.getLastChild();
-  if ($isMarkdownCodeFenceNode(closeFenceNode)) {
+  const closeFenceNode = codeBlock.getCloseFence();
+  if (closeFenceNode) {
     closeFenceNode.select(closeFenceText.length, closeFenceText.length);
   }
 }

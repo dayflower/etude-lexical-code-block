@@ -23,7 +23,6 @@ import {
 } from "../cursorPredicates";
 import {
   $isContentTextNode,
-  $isMarkdownCodeFenceNode,
   type MarkdownCodeBlockNode,
   OPEN_FENCE_PREFIX_LENGTH,
 } from "../MarkdownCodeBlockNode";
@@ -31,8 +30,8 @@ import {
 function $mergeFirstContentLineIntoOpenFence(
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const openFence = codeBlock.getFirstChild();
-  if (!$isMarkdownCodeFenceNode(openFence)) return false;
+  const openFence = codeBlock.getOpenFence();
+  if (!openFence) return false;
 
   const separator = openFence.getNextSibling();
   if (!$isLineBreakNode(separator)) return false;
@@ -116,8 +115,8 @@ function $dissolveCodeBlockMergingIntoPrev(
 function $mergeCloseFenceIntoLastContentLine(
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const closeFence = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+  const closeFence = codeBlock.getCloseFence();
+  if (!closeFence) return false;
 
   const lastLB = closeFence.getPreviousSibling();
   if (!$isLineBreakNode(lastLB)) return false;

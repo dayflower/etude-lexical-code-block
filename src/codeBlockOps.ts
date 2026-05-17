@@ -7,7 +7,6 @@ import {
 import {
   $appendCodeBlockChildren,
   $isMarkdownCodeBlockNode,
-  $isMarkdownCodeFenceNode,
   type MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
@@ -38,14 +37,12 @@ export function $findNearestMarkdownCodeBlockNode(
 export function $extractValidCodeBlockInfo(
   codeBlock: MarkdownCodeBlockNode,
 ): { language: string } | null {
-  const first = codeBlock.getFirstChild();
-  const last = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
-    return null;
-  }
-  const parsedOpen = parseOpenFence(first.getTextContent());
+  const open = codeBlock.getOpenFence();
+  const close = codeBlock.getCloseFence();
+  if (!open || !close) return null;
+  const parsedOpen = parseOpenFence(open.getTextContent());
   if (!parsedOpen) return null;
-  if (!isCloseFence(last.getTextContent())) return null;
+  if (!isCloseFence(close.getTextContent())) return null;
   // The "merged" transient states (close fence on the last content line, or
   // close fence sharing the only separator LB with no trailing LB) are not
   // persistable layouts but the block itself is still valid. We let
