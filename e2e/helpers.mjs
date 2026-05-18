@@ -63,9 +63,33 @@ export function getCodeBlock() {
   );
 }
 
+// Escape characters that JSON.stringify leaves intact but are unsafe to splice
+// into a JavaScript source string (see CodeQL js/bad-code-sanitization).
+const UNSAFE_JS_CHAR_MAP = {
+  "<": "\\u003C",
+  ">": "\\u003E",
+  "/": "\\u002F",
+  "\b": "\\b",
+  "\f": "\\f",
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\0": "\\0",
+  "\u2028": "\\u2028",
+  "\u2029": "\\u2029",
+};
+
+function escapeUnsafeJsChars(str) {
+  return str.replace(
+    /[<>/\b\f\n\r\t\0\u2028\u2029]/g,
+    (ch) => UNSAFE_JS_CHAR_MAP[ch],
+  );
+}
+
 export function getCodeBlockAttr(name) {
+  const safeName = escapeUnsafeJsChars(JSON.stringify(name));
   return pwEval(
-    `() => document.querySelector('pre.markdown-code-block')?.getAttribute(${JSON.stringify(name)}) ?? null`,
+    `() => document.querySelector('pre.markdown-code-block')?.getAttribute(${safeName}) ?? null`,
   );
 }
 
