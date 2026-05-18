@@ -119,7 +119,11 @@ function $tryRecoverFromDissolvedBlock(paragraph: ParagraphNode): boolean {
   const split = $splitParagraphAtLineBreaks(paragraph);
   const first = split[0];
   if (first) {
-    if ($tryReassembleAsCloseFence(first)) return true;
+    // `first` is guaranteed to match an open fence by the guard above, so only
+    // the open-fence forward scan is needed. When `first` is a bare ``` (an
+    // open fence with no language), a later paragraph that also matches ```
+    // satisfies the close-fence side, producing a single-line code block via
+    // the open-fence path.
     $tryReassembleAsOpenFence(first);
   }
   return true;
