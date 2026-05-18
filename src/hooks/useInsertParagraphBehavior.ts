@@ -11,7 +11,7 @@ import { useEffect } from "react";
 import {
   $exitCodeBlockAfter,
   $exitCodeBlockBefore,
-  $findNearestMarkdownCodeBlockNode,
+  $getCollapsedCaretInCodeBlock,
   parseOpenFence,
 } from "../codeBlockOps";
 import {
@@ -19,8 +19,7 @@ import {
   $isCursorAtCodeBlockStart,
 } from "../cursorPredicates";
 import {
-  $appendCodeBlockChildren,
-  $createMarkdownCodeBlockNode,
+  $createEmptyMarkdownCodeBlockNode,
   $selectFirstContentLineStart,
 } from "../MarkdownCodeBlockNode";
 
@@ -29,15 +28,9 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
     const remove = editor.registerCommand(
       INSERT_PARAGRAPH_COMMAND,
       () => {
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection) || !selection.isCollapsed())
-          return false;
-
-        const anchor = selection.anchor;
-        const anchorNode = anchor.getNode();
-
-        const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
-        if (codeBlock) {
+        const ctx = $getCollapsedCaretInCodeBlock();
+        if (ctx) {
+          const { anchor, codeBlock } = ctx;
           if ($isCursorAtCodeBlockStart(anchor, codeBlock)) {
             $exitCodeBlockBefore(codeBlock);
             return true;
@@ -48,9 +41,18 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
             return true;
           }
 
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) return false;
           selection.insertLineBreak();
           return true;
         }
+
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed())
+          return false;
+
+        const anchor = selection.anchor;
+        const anchorNode = anchor.getNode();
 
         if (!$isTextNode(anchorNode)) return false;
         const parent = anchorNode.getParent();
@@ -61,13 +63,7 @@ export function useInsertParagraphBehavior(editor: LexicalEditor): void {
         if (!parsed) return false;
 
         const language = parsed.language;
-        const codeBlockNode = $createMarkdownCodeBlockNode(language);
-        $appendCodeBlockChildren(
-          codeBlockNode,
-          `\`\`\`${language}`,
-          [""],
-          "```",
-        );
+        const codeBlockNode = $createEmptyMarkdownCodeBlockNode(language);
         parent.replace(codeBlockNode);
         $selectFirstContentLineStart(codeBlockNode);
         return true;

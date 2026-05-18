@@ -84,6 +84,16 @@ export class MarkdownCodeBlockNode extends ElementNode {
     return this.getLatest().__language;
   }
 
+  getOpenFence(): MarkdownCodeFenceNode | null {
+    const first = this.getFirstChild();
+    return $isMarkdownCodeFenceNode(first) ? first : null;
+  }
+
+  getCloseFence(): MarkdownCodeFenceNode | null {
+    const last = this.getLastChild();
+    return $isMarkdownCodeFenceNode(last) ? last : null;
+  }
+
   // Returns the middle content (between the fences) joined with "\n". The
   // first linebreak after the open fence is the structural separator and is
   // excluded. Returns null when the surrounding fences are missing.
@@ -127,25 +137,30 @@ export class MarkdownCodeBlockNode extends ElementNode {
     return lines.join("\n");
   }
 
-  // True when the structure has a terminating linebreak between the last
-  // content node and the close fence (canonical layout). False under the
-  // transient "close fence merged onto the last content line" state created
-  // by close-fence-line-start Backspace — including the empty-content variant
-  // [openFence, LB, closeFence] where the single LB is shared as the
-  // separator with no separate trailing LB.
+  // Whether the children currently end with the canonical
+  // `[..., trailingLB, closeFence]` separation between content and the close
+  // fence. The four cases:
   //
-  // Returns true when the close fence is missing (degenerate structure):
-  // callers that depend on the close fence's existence guard separately, and
-  // the "no transient state" default keeps rebuilders from inventing layout.
+  //   1. close fence missing (degenerate)                         → true
+  //   2. `[..., content, LB, closeFence]`            (canonical)  → true
+  //   3. `[openFence, LB, closeFence]`     (merged-on-empty)      → false
+  //   4. `[..., content, closeFence]` (merged onto last content)  → false
+  //
+  // Cases 3 and 4 are the transient "close fence merged onto the last content
+  // line" state produced by close-fence-line-start Backspace (see DESIGN.md
+  // "Backspace at block boundaries" / `$mergeCloseFenceIntoLastContentLine`).
+  // Case 1 defaults to true so rebuilders do not invent a merged layout for a
+  // degenerate structure; callers that depend on the close fence's existence
+  // guard separately.
   hasTrailingLineBreak(): boolean {
-    const last = this.getLastChild();
-    if (!$isMarkdownCodeFenceNode(last)) return true;
-    const prevOfLast = last.getPreviousSibling();
-    if (!$isLineBreakNode(prevOfLast)) return false;
-    // In [openFence, LB, closeFence] the only LB serves as the separator;
-    // there is no separate trailing LB. Treat this as the merged-on-empty
-    // transient state so CodeHighlightingPlugin preserves the layout.
-    return !prevOfLast.getPreviousSibling()?.is(this.getFirstChild());
+    const closeFence = this.getCloseFence();
+    if (!closeFence) return true; // case 1: degenerate
+    const prevOfLast = closeFence.getPreviousSibling();
+    if (!$isLineBreakNode(prevOfLast)) return false; // case 4: merged onto content
+    const prevOfLastIsOpenFence = prevOfLast
+      .getPreviousSibling()
+      ?.is(this.getOpenFence());
+    return !prevOfLastIsOpenFence; // case 3 (merged-on-empty) vs case 2 (canonical)
   }
 }
 
@@ -153,6 +168,14 @@ export function $createMarkdownCodeBlockNode(
   language: string,
 ): MarkdownCodeBlockNode {
   return new MarkdownCodeBlockNode(language);
+}
+
+export function $createEmptyMarkdownCodeBlockNode(
+  language: string,
+): MarkdownCodeBlockNode {
+  const block = $createMarkdownCodeBlockNode(language);
+  $appendCodeBlockChildren(block, `\`\`\`${language}`, [""], "```");
+  return block;
 }
 
 export function $isMarkdownCodeBlockNode(

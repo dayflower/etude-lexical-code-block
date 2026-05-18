@@ -1,6 +1,5 @@
 import { $isLineBreakNode, type LexicalNode, type PointType } from "lexical";
 import {
-  $isMarkdownCodeFenceNode,
   FIRST_CONTENT_LINE_CHILD_INDEX,
   type MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
@@ -14,8 +13,8 @@ export function $isCursorAtCodeBlockStart(
   anchor: PointType,
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const openFence = codeBlock.getFirstChild();
-  if (!$isMarkdownCodeFenceNode(openFence)) return false;
+  const openFence = codeBlock.getOpenFence();
+  if (!openFence) return false;
   const anchorNode = anchor.getNode();
   if (anchorNode.is(openFence)) return anchor.offset === 0;
   if (anchorNode.is(codeBlock)) return anchor.offset === 0;
@@ -26,8 +25,8 @@ export function $isCursorAtCodeBlockEnd(
   anchor: PointType,
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const closeFence = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+  const closeFence = codeBlock.getCloseFence();
+  if (!closeFence) return false;
   const anchorNode = anchor.getNode();
   if (anchorNode.is(closeFence)) {
     return anchor.offset === anchorNode.getTextContentSize();
@@ -67,8 +66,8 @@ export function $isCursorAtCloseFenceLineStart(
   anchor: PointType,
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const closeFence = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+  const closeFence = codeBlock.getCloseFence();
+  if (!closeFence) return false;
   const anchorNode = anchor.getNode();
   if (anchorNode.is(closeFence)) return anchor.offset === 0;
   if (anchorNode.is(codeBlock)) {
@@ -81,8 +80,8 @@ export function $isCursorOnCloseFenceLine(
   anchor: PointType,
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const closeFence = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+  const closeFence = codeBlock.getCloseFence();
+  if (!closeFence) return false;
   const anchorNode = anchor.getNode();
   if (anchorNode.is(closeFence)) return true;
 

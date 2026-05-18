@@ -1,8 +1,6 @@
 import {
-  $getSelection,
   $isLineBreakNode,
   $isParagraphNode,
-  $isRangeSelection,
   $isTextNode,
   COMMAND_PRIORITY_LOW,
   KEY_BACKSPACE_COMMAND,
@@ -12,7 +10,7 @@ import {
 } from "lexical";
 import { useEffect } from "react";
 import {
-  $findNearestMarkdownCodeBlockNode,
+  $getCollapsedCaretInCodeBlock,
   $replaceWithParagraphsPerLine,
   parseOpenFence,
 } from "../codeBlockOps";
@@ -23,7 +21,6 @@ import {
 } from "../cursorPredicates";
 import {
   $isContentTextNode,
-  $isMarkdownCodeFenceNode,
   type MarkdownCodeBlockNode,
   OPEN_FENCE_PREFIX_LENGTH,
 } from "../MarkdownCodeBlockNode";
@@ -31,8 +28,8 @@ import {
 function $mergeFirstContentLineIntoOpenFence(
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const openFence = codeBlock.getFirstChild();
-  if (!$isMarkdownCodeFenceNode(openFence)) return false;
+  const openFence = codeBlock.getOpenFence();
+  if (!openFence) return false;
 
   const separator = openFence.getNextSibling();
   if (!$isLineBreakNode(separator)) return false;
@@ -78,8 +75,7 @@ function $dissolveCodeBlockMergingIntoPrev(
   codeBlock: MarkdownCodeBlockNode,
   prev: ParagraphNode,
 ): void {
-  const text = codeBlock.getTextContent();
-  const paragraphs = $replaceWithParagraphsPerLine(codeBlock, text);
+  const paragraphs = $replaceWithParagraphsPerLine(codeBlock);
   const first = paragraphs[0];
   if (!first) return;
 
@@ -116,8 +112,8 @@ function $dissolveCodeBlockMergingIntoPrev(
 function $mergeCloseFenceIntoLastContentLine(
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const closeFence = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(closeFence)) return false;
+  const closeFence = codeBlock.getCloseFence();
+  if (!closeFence) return false;
 
   const lastLB = closeFence.getPreviousSibling();
   if (!$isLineBreakNode(lastLB)) return false;
@@ -148,13 +144,9 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
     const remove = editor.registerCommand(
       KEY_BACKSPACE_COMMAND,
       (event: KeyboardEvent | null) => {
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection) || !selection.isCollapsed())
-          return false;
-
-        const anchor = selection.anchor;
-        const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
-        if (!codeBlock) return false;
+        const ctx = $getCollapsedCaretInCodeBlock();
+        if (!ctx) return false;
+        const { anchor, codeBlock } = ctx;
 
         if ($isCursorAtCodeBlockStart(anchor, codeBlock)) {
           // Backspace at the very start of the code block. Lexical's default

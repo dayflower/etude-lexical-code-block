@@ -1,6 +1,4 @@
 import {
-  $getSelection,
-  $isRangeSelection,
   COMMAND_PRIORITY_LOW,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_RIGHT_COMMAND,
@@ -9,7 +7,7 @@ import {
 import { useEffect } from "react";
 import {
   $exitCodeBlockAfter,
-  $findNearestMarkdownCodeBlockNode,
+  $getCollapsedCaretInCodeBlock,
 } from "../codeBlockOps";
 import {
   $isCursorAtCodeBlockEnd,
@@ -22,15 +20,9 @@ export function useArrowKeyExitBehavior(editor: LexicalEditor): void {
       event: KeyboardEvent | null,
       requireEnd: boolean,
     ): boolean {
-      const selection = $getSelection();
-      if (!$isRangeSelection(selection) || !selection.isCollapsed())
-        return false;
-
-      const anchor = selection.anchor;
-      const anchorNode = anchor.getNode();
-
-      const codeBlock = $findNearestMarkdownCodeBlockNode(anchorNode);
-      if (!codeBlock) return false;
+      const ctx = $getCollapsedCaretInCodeBlock();
+      if (!ctx) return false;
+      const { anchor, codeBlock } = ctx;
       if (codeBlock.getNextSibling() !== null) return false;
 
       if (requireEnd) {

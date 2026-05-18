@@ -12,7 +12,9 @@ export function useCodeBlockFocusClass(editor: LexicalEditor): void {
           focusedKeys = $collectFocusedCodeBlockKeys();
         });
 
-        const doms = document.querySelectorAll(`.${CSS_CLASSES.CODE_BLOCK}`);
+        const root = editor.getRootElement();
+        if (!root) return;
+        const doms = root.querySelectorAll(`.${CSS_CLASSES.CODE_BLOCK}`);
         doms.forEach((dom) => {
           dom.classList.remove(CSS_CLASSES.FOCUSED);
         });

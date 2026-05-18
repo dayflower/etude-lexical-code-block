@@ -1,13 +1,16 @@
 import {
   $createParagraphNode,
   $createTextNode,
+  $getSelection,
+  $isElementNode,
+  $isRangeSelection,
   type LexicalNode,
   type ParagraphNode,
+  type PointType,
 } from "lexical";
 import {
   $appendCodeBlockChildren,
   $isMarkdownCodeBlockNode,
-  $isMarkdownCodeFenceNode,
   type MarkdownCodeBlockNode,
 } from "./MarkdownCodeBlockNode";
 
@@ -35,17 +38,27 @@ export function $findNearestMarkdownCodeBlockNode(
   return null;
 }
 
+export function $getCollapsedCaretInCodeBlock(): {
+  anchor: PointType;
+  codeBlock: MarkdownCodeBlockNode;
+} | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+  const anchor = selection.anchor;
+  const codeBlock = $findNearestMarkdownCodeBlockNode(anchor.getNode());
+  if (!codeBlock) return null;
+  return { anchor, codeBlock };
+}
+
 export function $extractValidCodeBlockInfo(
   codeBlock: MarkdownCodeBlockNode,
 ): { language: string } | null {
-  const first = codeBlock.getFirstChild();
-  const last = codeBlock.getLastChild();
-  if (!$isMarkdownCodeFenceNode(first) || !$isMarkdownCodeFenceNode(last)) {
-    return null;
-  }
-  const parsedOpen = parseOpenFence(first.getTextContent());
+  const open = codeBlock.getOpenFence();
+  const close = codeBlock.getCloseFence();
+  if (!open || !close) return null;
+  const parsedOpen = parseOpenFence(open.getTextContent());
   if (!parsedOpen) return null;
-  if (!isCloseFence(last.getTextContent())) return null;
+  if (!isCloseFence(close.getTextContent())) return null;
   // The "merged" transient states (close fence on the last content line, or
   // close fence sharing the only separator LB with no trailing LB) are not
   // persistable layouts but the block itself is still valid. We let
@@ -84,9 +97,9 @@ export function $normalizeCodeBlock(
 // Returns the newly inserted paragraphs in document order.
 export function $replaceWithParagraphsPerLine(
   node: LexicalNode,
-  text: string,
+  text?: string,
 ): ParagraphNode[] {
-  const lines = text.split("\n");
+  const lines = (text ?? node.getTextContent()).split("\n");
   const created: ParagraphNode[] = [];
   let prev: LexicalNode = node;
   for (const line of lines) {
@@ -105,7 +118,7 @@ export function $replaceWithParagraphsPerLine(
 export function $unwrapMarkdownCodeBlockNode(
   codeBlock: MarkdownCodeBlockNode,
 ): void {
-  $replaceWithParagraphsPerLine(codeBlock, codeBlock.getTextContent());
+  $replaceWithParagraphsPerLine(codeBlock);
 }
 
 export function $exitCodeBlockBefore(codeBlock: MarkdownCodeBlockNode): void {
@@ -118,4 +131,13 @@ export function $exitCodeBlockAfter(codeBlock: MarkdownCodeBlockNode): void {
   const paragraph = $createParagraphNode();
   codeBlock.insertAfter(paragraph);
   paragraph.select();
+}
+
+export function $jumpAfterCodeBlock(codeBlock: MarkdownCodeBlockNode): void {
+  const next = codeBlock.getNextSibling();
+  if ($isElementNode(next)) {
+    next.selectStart();
+    return;
+  }
+  $exitCodeBlockAfter(codeBlock);
 }

@@ -15,7 +15,6 @@ import {
 import {
   $appendCodeBlockChildren,
   $createMarkdownCodeBlockNode,
-  $isMarkdownCodeFenceNode,
 } from "../MarkdownCodeBlockNode";
 
 function $buildCodeBlockFromParagraphs(
@@ -37,8 +36,8 @@ function $buildCodeBlockFromParagraphs(
   for (const mid of middleParagraphs) mid.remove();
   closeParagraph.remove();
 
-  const closeFenceNode = codeBlock.getLastChild();
-  if ($isMarkdownCodeFenceNode(closeFenceNode)) {
+  const closeFenceNode = codeBlock.getCloseFence();
+  if (closeFenceNode) {
     closeFenceNode.select(closeFenceText.length, closeFenceText.length);
   }
 }
@@ -120,7 +119,11 @@ function $tryRecoverFromDissolvedBlock(paragraph: ParagraphNode): boolean {
   const split = $splitParagraphAtLineBreaks(paragraph);
   const first = split[0];
   if (first) {
-    if ($tryReassembleAsCloseFence(first)) return true;
+    // `first` is guaranteed to match an open fence by the guard above, so only
+    // the open-fence forward scan is needed. When `first` is a bare ``` (an
+    // open fence with no language), a later paragraph that also matches ```
+    // satisfies the close-fence side, producing a single-line code block via
+    // the open-fence path.
     $tryReassembleAsOpenFence(first);
   }
   return true;
