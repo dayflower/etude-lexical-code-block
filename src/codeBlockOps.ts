@@ -3,10 +3,13 @@ import {
   $createTextNode,
   $getSelection,
   $isElementNode,
+  $isLineBreakNode,
   $isRangeSelection,
+  $isTextNode,
   type LexicalNode,
   type ParagraphNode,
   type PointType,
+  type TextNode,
 } from "lexical";
 import {
   $appendCodeBlockChildren,
@@ -115,10 +118,114 @@ export function $replaceWithParagraphsPerLine(
   return created;
 }
 
+// Position of the caret within a code block, encoded as a stable coordinate
+// that survives the unwrap. `lineIndex` is the index into the paragraph
+// sequence that `$replaceWithParagraphsPerLine` produces (which mirrors the
+// "\n"-split of `getTextContent()`), and `lineOffset` is the character offset
+// within that line.
+type CodeBlockCaretPosition = {
+  lineIndex: number;
+  lineOffset: number;
+};
+
+// Capture the collapsed caret if it currently sits inside `codeBlock`. Returns
+// null otherwise so the caller can fall back to Lexical's default selection
+// reconciliation (e.g. when the unwrap is driven by an edit that left the
+// selection outside the block).
+function $captureCaretPositionInCodeBlock(
+  codeBlock: MarkdownCodeBlockNode,
+): CodeBlockCaretPosition | null {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return null;
+  const anchor = selection.anchor;
+  const anchorNode = anchor.getNode();
+  if ($findNearestMarkdownCodeBlockNode(anchorNode) !== codeBlock) return null;
+
+  if (anchor.type === "element") {
+    if (anchorNode !== codeBlock) return null;
+    return $caretFromChildIndex(codeBlock, anchor.offset);
+  }
+  if (!$isTextNode(anchorNode)) return null;
+  return $caretFromTextNode(anchorNode, anchor.offset);
+}
+
+// Walk previous siblings: same-line TextNode lengths fold into `lineOffset`
+// until the first LB; every LB encountered after that increments `lineIndex`.
+// The open fence is also a TextNode (subclass), but it always sits past at
+// least one LB when walking from a non-open-fence anchor, so it never
+// contributes to `lineOffset`.
+function $caretFromTextNode(
+  textNode: TextNode,
+  offset: number,
+): CodeBlockCaretPosition {
+  let lineOffset = offset;
+  let lineIndex = 0;
+  let crossedLB = false;
+  let cur: LexicalNode | null = textNode.getPreviousSibling();
+  while (cur) {
+    if ($isLineBreakNode(cur)) {
+      lineIndex++;
+      crossedLB = true;
+    } else if (!crossedLB && $isTextNode(cur)) {
+      lineOffset += cur.getTextContentSize();
+    }
+    cur = cur.getPreviousSibling();
+  }
+  return { lineIndex, lineOffset };
+}
+
+// Element-type anchor on the code block itself: `childIndex` is the "caret
+// before child[i]" position. Walk children [0, childIndex) accumulating the
+// same way as `$caretFromTextNode`, but forward.
+function $caretFromChildIndex(
+  codeBlock: MarkdownCodeBlockNode,
+  childIndex: number,
+): CodeBlockCaretPosition {
+  const children = codeBlock.getChildren();
+  const max = Math.min(childIndex, children.length);
+  let lineIndex = 0;
+  let lineOffset = 0;
+  for (let i = 0; i < max; i++) {
+    const child = children[i];
+    if ($isLineBreakNode(child)) {
+      lineIndex++;
+      lineOffset = 0;
+    } else if ($isTextNode(child)) {
+      lineOffset += child.getTextContentSize();
+    }
+  }
+  return { lineIndex, lineOffset };
+}
+
+function $restoreCaretInParagraphs(
+  paragraphs: ParagraphNode[],
+  pos: CodeBlockCaretPosition,
+): void {
+  if (paragraphs.length === 0) return;
+  const idx = Math.min(pos.lineIndex, paragraphs.length - 1);
+  const paragraph = paragraphs[idx];
+  const child = paragraph.getFirstChild();
+  if ($isTextNode(child)) {
+    const safeOffset = Math.min(pos.lineOffset, child.getTextContentSize());
+    child.select(safeOffset, safeOffset);
+    return;
+  }
+  paragraph.selectStart();
+}
+
+// Dissolve a code block back to plain paragraphs. Preserves the caret across
+// the unwrap by translating its in-block position into a (lineIndex,
+// lineOffset) coordinate that maps directly onto the resulting paragraph
+// sequence — without this, Lexical's selection reconciliation lands the caret
+// outside the (now-gone) block.
 export function $unwrapMarkdownCodeBlockNode(
   codeBlock: MarkdownCodeBlockNode,
 ): void {
-  $replaceWithParagraphsPerLine(codeBlock);
+  const pos = $captureCaretPositionInCodeBlock(codeBlock);
+  const paragraphs = $replaceWithParagraphsPerLine(codeBlock);
+  if (pos !== null) {
+    $restoreCaretInParagraphs(paragraphs, pos);
+  }
 }
 
 export function $exitCodeBlockBefore(codeBlock: MarkdownCodeBlockNode): void {
