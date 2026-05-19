@@ -3,12 +3,17 @@ import { useEffect, useRef } from "react";
 import {
   $extractValidCodeBlockInfo,
   $normalizeCodeBlock,
-  $unwrapMarkdownCodeBlockNode,
 } from "../codeBlockOps";
 import { $isMarkdownCodeBlockNode } from "../MarkdownCodeBlockNode";
 import { $collectFocusedCodeBlockKeys } from "./focusedCodeBlockKeys";
 
-export function useCodeBlockValidationOnBlur(editor: LexicalEditor): void {
+// On blur, re-canonicalize any code block the selection just left. The only
+// non-canonical layout that can reach blur is the merged-on-empty form
+// (`[openFence, LB, closeFence]`) produced by
+// `$mergeFirstContentLineIntoOpenFence` — invalid blocks and case-4 (close
+// fence merged onto last content line) are dissolved on the spot by
+// `useCodeBlockValidationOnEdit`, so they never survive to here.
+export function useCodeBlockNormalizeOnBlur(editor: LexicalEditor): void {
   const focusedKeysRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -30,11 +35,8 @@ export function useCodeBlockValidationOnBlur(editor: LexicalEditor): void {
             const node = $getNodeByKey(key);
             if (!$isMarkdownCodeBlockNode(node)) continue;
             const info = $extractValidCodeBlockInfo(node);
-            if (info) {
-              $normalizeCodeBlock(node, info.language);
-            } else {
-              $unwrapMarkdownCodeBlockNode(node);
-            }
+            if (!info) continue;
+            $normalizeCodeBlock(node, info.language);
           }
         });
       },
