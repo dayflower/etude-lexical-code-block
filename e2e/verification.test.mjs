@@ -19,6 +19,7 @@ import {
   moveCursorToBlockStart,
   moveCursorToCloseFenceLineStart,
   moveCursorToFirstContentLineStart,
+  moveCursorToParagraph,
   pw,
   pwEval,
   resetEditor,
@@ -76,9 +77,7 @@ describe("content input", () => {
     pw("type", "```js");
     pw("press", "Enter");
     pw("type", "const x = 1;");
-    // Highlighting only fires once the caret leaves the block (the
-    // validation listener in useCodeBlockValidationOnBlur watches for
-    // focus-departure rather than DOM blur). Escape exits to a new paragraph.
+    // Press Escape to exit the block before asserting on highlight classes.
     pw("press", "Escape");
     const html = getCodeBlock();
     assert.match(
@@ -159,24 +158,23 @@ describe("backspace at first content line start", () => {
 });
 
 describe("backspace at close fence line start", () => {
-  test("prev = content — close fence joins onto last content line", async () => {
+  test("prev = content — block dissolves with caret at join point", async () => {
     await resetEditor();
     pw("type", "```js");
     pw("press", "Enter");
     pw("type", "alpha");
     moveCursorToCloseFenceLineStart();
     pw("press", "Backspace");
-    const children = getCodeBlockChildrenSummary();
-    // Expected layout: [openFence, BR, content "alpha", closeFence] — the
-    // trailing BR is gone and close fence is the immediate next sibling.
-    assert.equal(children.length, 4);
-    assert.equal(children[0].text, "```js");
-    assert.equal(children[1].kind, "br");
-    assert.equal(children[2].text, "alpha");
-    assert.equal(children[3].text, "```");
+    // $handleCloseFenceLineStartBackspace branch 1: content above the lastLB
+    // dissolves the block directly with the caret at the join point (end of
+    // the last content line in the resulting paragraph). The merge step is
+    // skipped because useCodeBlockValidationOnEdit would reject the merged
+    // layout anyway.
+    assert.equal(getCodeBlockCount(), 0);
+    assert.deepEqual(getParagraphTexts(), ["```js", "alpha```"]);
     const cursor = getCursorInfo();
-    assert.equal(cursor.text, "alpha");
-    assert.equal(cursor.offset, 5, "caret sits at the end of content");
+    assert.equal(cursor.text, "alpha```");
+    assert.equal(cursor.offset, 5, "caret at end of 'alpha' (join point)");
   });
 
   test("prev = empty line — empty line collapses, caret at close fence start", async () => {
@@ -264,9 +262,9 @@ describe("exit keys", () => {
   });
 });
 
-// The validation listener (useCodeBlockValidationOnBlur) runs whenever the
-// caret leaves a code block — not on DOM blur. Escape is the simplest
-// trigger that also surfaces canonical/unwrap behavior.
+// useCodeBlockNormalizeOnBlur runs whenever the caret leaves a code block —
+// not on DOM blur. Escape is the simplest trigger that surfaces the on-blur
+// normalization path.
 describe("validation on exit", () => {
   test("canonical structure is preserved across exit", async () => {
     await resetEditor();
@@ -293,22 +291,95 @@ describe("validation on exit", () => {
       .join("");
     assert.equal(afterText, beforeText);
   });
+});
 
-  test("broken close fence unwraps on exit", async () => {
+// useCodeBlockValidationOnEdit dissolves a block the instant its fence
+// becomes invalid — the caret never has to leave the block for the unwrap
+// to fire. Combined with caret preservation, the cursor lands at the
+// equivalent position inside the resulting paragraphs.
+describe("validation on edit", () => {
+  test("broken close fence dissolves immediately", async () => {
     await resetEditor();
     pw("type", "```js");
     pw("press", "Enter");
     pw("type", "alpha");
-    // Drive corruption through the keyboard so Lexical's selection model
-    // stays in sync: append text past the close fence so the close fence
-    // becomes "```BROKEN" (rejected by isCloseFence).
     moveCursorToCloseFenceLineStart();
     pw("press", "End");
     pw("type", "BROKEN");
-    assert.match(getCodeBlock(), /```BROKEN/);
-    pw("press", "Escape");
-    assert.equal(getCodeBlockCount(), 0, "block was unwrapped");
-    assert.deepEqual(getParagraphTexts(), ["```js", "alpha", "```BROKEN", ""]);
+    // The first 'B' makes the close fence "```B" — rejected by isCloseFence
+    // — so the validator unwraps right then. The remaining "ROKEN" types
+    // into the (caret-preserved) resulting paragraph.
+    assert.equal(getCodeBlockCount(), 0, "block dissolved on edit");
+    assert.deepEqual(getParagraphTexts(), ["```js", "alpha", "```BROKEN"]);
+  });
+
+  test("broken open fence dissolves immediately, caret preserved", async () => {
+    await resetEditor();
+    pw("type", "```js");
+    pw("press", "Enter");
+    pw("type", "alpha");
+    // Caret to offset 1 of the open fence (between first and second backtick).
+    moveCursorToBlockStart();
+    pw("press", "ArrowRight");
+    pw("press", "Backspace");
+    // Open fence "```js" → "``js" fails parseOpenFence → dissolve. Caret
+    // sat at offset 0 of the open fence after the deletion; it should land
+    // at offset 0 of paragraph[0] = "``js".
+    assert.equal(getCodeBlockCount(), 0);
+    assert.deepEqual(getParagraphTexts(), ["``js", "alpha", "```"]);
+    const cursor = getCursorInfo();
+    assert.equal(cursor.text, "``js");
+    assert.equal(cursor.offset, 0);
+  });
+
+  test("broken close fence (interior) dissolves immediately, caret preserved", async () => {
+    await resetEditor();
+    pw("type", "```js");
+    pw("press", "Enter");
+    pw("type", "alpha");
+    // Caret to offset 1 of the close fence.
+    moveCursorToCloseFenceLineStart();
+    pw("press", "ArrowRight");
+    pw("press", "Backspace");
+    // Close fence "```" → "``" fails isCloseFence → dissolve. Caret sat at
+    // offset 0 of the close fence after the deletion; it should land at
+    // offset 0 of paragraph[2] = "``".
+    assert.equal(getCodeBlockCount(), 0);
+    assert.deepEqual(getParagraphTexts(), ["```js", "alpha", "``"]);
+    const cursor = getCursorInfo();
+    assert.equal(cursor.text, "``");
+    assert.equal(cursor.offset, 0);
+  });
+});
+
+// useReassembleCodeBlock fuses a matching open-fence / middle / close-fence
+// paragraph trio into a code block; $buildCodeBlockFromParagraphs preserves
+// the caret on whichever of the three paragraphs it sat on (so completing
+// the open fence does not yank the caret to the close fence's end).
+describe("reassembly", () => {
+  test("typing the third backtick on the open fence keeps caret on it", async () => {
+    await resetEditor();
+    // Dissolved layout: ``, abc, ``` on three separate paragraphs.
+    pw("type", "``");
+    pw("press", "Enter");
+    pw("type", "abc");
+    pw("press", "Enter");
+    pw("type", "```");
+    // Caret to offset 0 of the first paragraph.
+    moveCursorToParagraph(0, 0);
+    // Type the third backtick: first paragraph becomes "```" → matches
+    // open fence regex; reassembly fuses the three paragraphs. With caret
+    // preservation, the caret should remain on the open fence at offset 1
+    // (right after the just-typed `), not jump to the close fence's end.
+    pw("type", "`");
+    assert.equal(getCodeBlockCount(), 1);
+    const cursor = getCursorInfo();
+    assert.equal(cursor.text, "```");
+    assert.equal(
+      cursor.offset,
+      1,
+      "caret stays on open fence at typed position",
+    );
   });
 });
 
