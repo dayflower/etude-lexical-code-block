@@ -41,21 +41,34 @@ export function $isCursorAtCodeBlockEnd(
 // "very start of the first content line" sits just after the separator LB,
 // either as an element-type anchor on the block at offset 2 (empty first
 // line) or as a text-type anchor at offset 0 of the first content child.
+//
+// Degenerate guard: in the layout `[openFence, LB, closeFence]` (case 3 —
+// produced by `$mergeFirstContentLineIntoOpenFence` when the user merged the
+// only content row away), the child at FIRST_CONTENT_LINE_CHILD_INDEX is the
+// close fence itself. That position is also the close-fence-line start, and
+// merging "no content" via the first-content-line Backspace path would just
+// drop the separator LB and leave `[openFence, closeFence]` — which
+// `useCodeBlockValidationOnEdit` then dissolves. Treat the degenerate state
+// as "no first content line" so the Backspace handler falls through to the
+// close-fence-line-start branch (which slides the caret up instead).
 export function $isCursorAtFirstContentLineStart(
   anchor: PointType,
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
-  const anchorNode = anchor.getNode();
+  const firstContent = codeBlock.getChildAtIndex(
+    FIRST_CONTENT_LINE_CHILD_INDEX,
+  );
+  if (!firstContent || firstContent.is(codeBlock.getCloseFence())) {
+    return false;
+  }
 
+  const anchorNode = anchor.getNode();
   if (anchorNode.is(codeBlock)) {
     return anchor.offset === FIRST_CONTENT_LINE_CHILD_INDEX;
   }
 
   if (anchor.offset !== 0) return false;
-  const firstContent = codeBlock.getChildAtIndex(
-    FIRST_CONTENT_LINE_CHILD_INDEX,
-  );
-  return firstContent !== null && anchorNode.is(firstContent);
+  return anchorNode.is(firstContent);
 }
 
 // Mirror of $isCursorAtFirstContentLineStart for the opposite end. The "very
