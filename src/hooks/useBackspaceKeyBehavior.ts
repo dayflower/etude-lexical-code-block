@@ -93,23 +93,21 @@ function $dissolveCodeBlockMergingIntoPrev(
   prev.select(prev.getChildrenSize(), prev.getChildrenSize());
 }
 
-// Caret sits at the start of the close-fence line (just after the last LB).
-// Backspace at the start of a line normally joins it with the previous one;
-// applied here, drop the trailing LB so the close fence moves up onto the
-// line above. We can't fall through to Lexical's default LB-delete because
-// the resulting "no LB before closeFence" layout trips up
-// CodeHighlightingPlugin's rebuild (see expectedChildrenFromCodeText), so we
-// handle it ourselves and rely on `hasTrailingLineBreak()` to signal the
-// transient layout to the rebuilder.
+// Backspace at the start of the close-fence line. Three branches by what
+// sits above the lastLB:
 //
-// Cursor placement depends on what sits on the line above:
-//   - Content text — caret at the join point (end of the content).
-//   - Empty content line (another LB above) — caret at the close-fence start.
-//
-// When the only thing above is the open fence (degenerate [openFence, LB,
-// closeFence] reached only by typing into the merged-on-empty state), there
-// is no further line to merge onto. Slide the caret up instead.
-function $mergeCloseFenceIntoLastContentLine(
+//   - Content text — dissolve the block directly. Naively letting Lexical
+//     default fire (or just removing the lastLB) produces the case-4 merged
+//     layout that `useCodeBlockValidationOnEdit` would reject anyway; skip
+//     the transient state and unwrap with explicit caret placement at the
+//     join point (end of the last content line in the resulting paragraph).
+//   - Empty content line (another LB above) — drop the lastLB so the close
+//     fence moves up onto the empty line. Still a valid block (LB remains
+//     before the close fence).
+//   - Open fence directly above (degenerate `[openFence, LB, closeFence]`,
+//     reached only by typing into the merged-on-empty state) — no further
+//     line to merge onto; slide the caret up to the lastLB's index.
+function $handleCloseFenceLineStartBackspace(
   codeBlock: MarkdownCodeBlockNode,
 ): boolean {
   const closeFence = codeBlock.getCloseFence();
@@ -122,9 +120,23 @@ function $mergeCloseFenceIntoLastContentLine(
   if (!before) return false;
 
   if ($isContentTextNode(before)) {
-    const size = before.getTextContentSize();
+    // Sum lengths of every content TextNode on the last line — Prism may have
+    // split it into multiple sibling tokens.
+    let lastLineLength = 0;
+    let cur: LexicalNode | null = before;
+    while ($isContentTextNode(cur)) {
+      lastLineLength += cur.getTextContentSize();
+      cur = cur.getPreviousSibling();
+    }
+    // Remove the lastLB so `getTextContent()` (used by the unwrap) reflects
+    // the merged final line `<lastContentLine><closeFenceText>`.
     lastLB.remove();
-    before.select(size, size);
+    const paragraphs = $replaceWithParagraphsPerLine(codeBlock);
+    const lastParagraph = paragraphs[paragraphs.length - 1];
+    const firstChild = lastParagraph?.getFirstChild();
+    if ($isTextNode(firstChild)) {
+      firstChild.select(lastLineLength, lastLineLength);
+    }
     return true;
   }
 
@@ -181,7 +193,7 @@ export function useBackspaceKeyBehavior(editor: LexicalEditor): void {
         }
 
         if ($isCursorAtCloseFenceLineStart(anchor, codeBlock)) {
-          if ($mergeCloseFenceIntoLastContentLine(codeBlock)) {
+          if ($handleCloseFenceLineStartBackspace(codeBlock)) {
             event?.preventDefault();
             return true;
           }

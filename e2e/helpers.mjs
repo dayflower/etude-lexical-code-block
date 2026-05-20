@@ -216,6 +216,32 @@ export function moveCursorToCloseFenceLineStart() {
   );
 }
 
+// Set the caret on the Nth `<p>` inside the editor at the given character
+// offset within its first text node (or as an element-type anchor on the
+// paragraph when it has no text child yet).
+export function moveCursorToParagraph(nth, offset = 0) {
+  pwEval(
+    `() => {
+      const ps = document.querySelectorAll('[data-lexical-editor=true] p');
+      const p = ps[${nth}];
+      if (!p) throw new Error('no paragraph at index ' + ${nth});
+      const sel = window.getSelection();
+      const range = document.createRange();
+      const t = p.firstChild;
+      if (t && t.nodeType === 3) {
+        range.setStart(t, ${offset});
+      } else {
+        range.setStart(p, ${offset});
+      }
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      p.focus();
+      return true;
+    }`,
+  );
+}
+
 // Caret at offset 0 of the first content line. The canonical layout puts
 // the first content node as block.childNodes[2] (open fence, BR, first
 // content); for an empty block, that index has no node yet, so we fall back
