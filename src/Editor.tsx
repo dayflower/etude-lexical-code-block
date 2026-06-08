@@ -8,11 +8,13 @@ import { useState } from "react";
 import CodeHighlightingPlugin from "./CodeHighlightingPlugin";
 import { CSS_CLASSES } from "./constants";
 import { initialConfig } from "./editorConfig";
+import HtmlPreviewPlugin from "./HtmlPreviewPlugin";
 import MarkdownCodeBlockPlugin from "./MarkdownCodeBlockPlugin";
 import MarkdownPreviewPlugin from "./MarkdownPreviewPlugin";
 
 export default function Editor() {
   const [markdownSource, setMarkdownSource] = useState("");
+  const [htmlOutput, setHtmlOutput] = useState("");
   const [alwaysShowFences, setAlwaysShowFences] = useState(false);
 
   return (
@@ -42,6 +44,7 @@ export default function Editor() {
               <MarkdownCodeBlockPlugin />
               <CodeHighlightingPlugin />
               <MarkdownPreviewPlugin onMarkdown={setMarkdownSource} />
+              <HtmlPreviewPlugin onHtml={setHtmlOutput} />
             </div>
           </LexicalComposer>
         </div>
@@ -51,6 +54,14 @@ export default function Editor() {
             {markdownSource}
           </pre>
         </div>
+      </div>
+      <div>
+        <p className="text-sm text-gray-500 mb-1">
+          HTML output (via $generateHtmlFromNodes)
+        </p>
+        <pre className="border border-gray-300 rounded-lg p-4 bg-gray-50 font-mono text-sm whitespace-pre-wrap overflow-auto">
+          {htmlOutput}
+        </pre>
       </div>
       <label className="flex items-center gap-2 text-sm text-gray-600 select-none">
         <input

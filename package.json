@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@lexical/code-core": "^0.45.0",
+    "@lexical/html": "^0.45.0",
     "@lexical/react": "^0.45.0",
     "lexical": "^0.45.0",
     "prismjs": "^1.30.0",

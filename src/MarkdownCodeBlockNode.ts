@@ -5,6 +5,7 @@ import {
   $isTextNode,
   type DOMConversionMap,
   type DOMConversionOutput,
+  type DOMExportOutput,
   type EditorConfig,
   ElementNode,
   type LexicalNode,
@@ -49,6 +50,21 @@ export class MarkdownCodeBlockNode extends ElementNode {
       dom.setAttribute("data-language", this.__language);
     }
     return false;
+  }
+
+  // Emit a semantic `<pre><code>` for HTML export (`$generateHtmlFromNodes`).
+  // The editing children are the literal ``` fences, per-line highlight nodes
+  // and structural line breaks, so skip them via `$getChildNodes` and rebuild
+  // just the code body from `getCodeText()`.
+  exportDOM(): DOMExportOutput {
+    const pre = document.createElement("pre");
+    const code = document.createElement("code");
+    if (this.__language) {
+      code.className = `language-${this.__language}`;
+    }
+    code.textContent = this.getCodeText() ?? this.getTextContent();
+    pre.appendChild(code);
+    return { element: pre, $getChildNodes: () => [] };
   }
 
   static importDOM(): DOMConversionMap | null {
