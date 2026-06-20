@@ -1,5 +1,8 @@
 # etude-lexical-code-block
 
+> [!NOTE]
+> **This repository is no longer maintained.** Development has been consolidated into [dayflower/etude-lexical-markdown](https://github.com/dayflower/etude-lexical-markdown). Please refer to that repository for the latest work.
+
 A personal study project implementing Markdown-style code block editing logic in [Lexical](https://lexical.dev/).
 
 <img src="notes/screenshot.png" width="800">
